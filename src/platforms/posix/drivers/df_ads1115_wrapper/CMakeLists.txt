@@ -14,6 +14,5 @@ px4_add_module(
 	DEPENDS
 		platforms__common
 		df_driver_framework
-		#df_ads1115
 	)
 # vim: set noet ft=cmake fenc=utf-8 ff=unix :
