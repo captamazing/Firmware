@@ -353,7 +353,6 @@ Sensors::parameters_update()
 int
 Sensors::adc_init()
 {
-
 	DevMgr::getHandle(ADC0_DEVICE_PATH, _h_adc);
 
 	if (!_h_adc.isValid()) {
@@ -471,7 +470,7 @@ Sensors::adc_poll(struct sensor_combined_s &raw)
 		struct adc_msg_s buf_adc[12];
 		/* read all channels available */
 		int ret = _h_adc.read(&buf_adc, sizeof(buf_adc));
-
+		
 		float bat_voltage_v = 0.0f;
 		float bat_current_a = 0.0f;
 		bool updated_battery = false;
@@ -554,7 +553,7 @@ Sensors::task_main()
 	int ret = 0;
 
 	if (!_hil_enabled) {
-#if !defined(__PX4_QURT) && !defined(__PX4_POSIX_RPI) && !defined(__PX4_POSIX_BEBOP)
+#if !defined(__PX4_QURT) && !defined(__PX4_POSIX_BEBOP)
 		adc_init();
 #endif
 	}
@@ -708,6 +707,7 @@ int
 Sensors::start()
 {
 	ASSERT(_sensors_task == -1);
+
 
 	/* start the task */
 	_sensors_task = px4_task_spawn_cmd("sensors",

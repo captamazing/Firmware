@@ -37,9 +37,9 @@
 #include "navio_rgbled.h"
 
 #define GPIO_LED_CNF    (GPIO_CNF_OUTPUT)
-#define GPIO_LED_R      (GPIO_PIN4)
+#define GPIO_LED_R      (GPIO_PIN24)
 #define GPIO_LED_G      (GPIO_PIN27)
-#define GPIO_LED_B      (GPIO_PIN6)
+#define GPIO_LED_B      (GPIO_PIN25)
 
 #define RGBLED_BASE_DEVICE_PATH "/dev/rgbled"
 
