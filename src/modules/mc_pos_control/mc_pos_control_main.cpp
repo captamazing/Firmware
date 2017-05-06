@@ -755,9 +755,9 @@ MulticopterPositionControl::poll_subscriptions()
 	if (updated) {
 		orb_copy(ORB_ID(position_setpoint_triplet), _pos_sp_triplet_sub, &_pos_sp_triplet);
 
-		//Make sure that the position setpoint is valid
-		if (!PX4_ISFINITE(_pos_sp_triplet.current.lat) ||
-		    !PX4_ISFINITE(_pos_sp_triplet.current.lon) ||
+		//set current position setpoint invalid if none of them (lat, lon and alt) is finite
+		if (!PX4_ISFINITE(_pos_sp_triplet.current.lat) &&
+		    !PX4_ISFINITE(_pos_sp_triplet.current.lon) &&
 		    !PX4_ISFINITE(_pos_sp_triplet.current.alt)) {
 			_pos_sp_triplet.current.valid = false;
 		}
@@ -1384,11 +1384,26 @@ void MulticopterPositionControl::control_auto(float dt)
 
 	if (_pos_sp_triplet.current.valid) {
 
-		/* project setpoint to local frame */
-		map_projection_project(&_ref_pos,
-				       _pos_sp_triplet.current.lat, _pos_sp_triplet.current.lon,
-				       &_curr_pos_sp.data[0], &_curr_pos_sp.data[1]);
-		_curr_pos_sp(2) = -(_pos_sp_triplet.current.alt - _ref_alt);
+		//only project setpoints if they are finite, else use current position
+		if (PX4_ISFINITE(_pos_sp_triplet.current.lat) &&
+		    PX4_ISFINITE(_pos_sp_triplet.current.lon)) {
+			/* project setpoint to local frame */
+			map_projection_project(&_ref_pos,
+					       _pos_sp_triplet.current.lat, _pos_sp_triplet.current.lon,
+					       &_curr_pos_sp.data[0], &_curr_pos_sp.data[1]);
+
+		} else {
+			_curr_pos_sp(0) = _pos(0);
+			_curr_pos_sp(1) = _pos(1);
+		}
+
+		//only project setpoints if they are finite, else use current position
+		if (PX4_ISFINITE(_pos_sp_triplet.current.alt)) {
+			_curr_pos_sp(2) = -(_pos_sp_triplet.current.alt - _ref_alt);
+
+		} else {
+			_curr_pos_sp(2) = _pos(2);
+		}
 
 		if (PX4_ISFINITE(_curr_pos_sp(0)) &&
 		    PX4_ISFINITE(_curr_pos_sp(1)) &&
@@ -1678,8 +1693,16 @@ MulticopterPositionControl::calculate_velocity_setpoint(float dt)
 {
 	/* run position & altitude controllers, if enabled (otherwise use already computed velocity setpoints) */
 	if (_run_pos_control) {
-		_vel_sp(0) = (_pos_sp(0) - _pos(0)) * _params.pos_p(0);
-		_vel_sp(1) = (_pos_sp(1) - _pos(1)) * _params.pos_p(1);
+
+		// If for any reason, we get a NaN position setpoint, we better just stay where we are.
+		if (PX4_ISFINITE(_pos_sp(0)) && PX4_ISFINITE(_pos_sp(1))) {
+			_vel_sp(0) = (_pos_sp(0) - _pos(0)) * _params.pos_p(0);
+			_vel_sp(1) = (_pos_sp(1) - _pos(1)) * _params.pos_p(1);
+
+		} else {
+			_vel_sp(0) = 0.0f;
+			_vel_sp(1) = 0.0f;
+		}
 	}
 
 	limit_altitude();
