@@ -24,6 +24,7 @@ set(config_module_list
 	platforms/posix/drivers/df_trone_wrapper
 	platforms/posix/drivers/df_isl29501_wrapper
 	platforms/posix/drivers/df_ads1115_wrapper
+	platforms/posix/drivers/df_ursarcin_wrapper
 
 	#
 	# System commands

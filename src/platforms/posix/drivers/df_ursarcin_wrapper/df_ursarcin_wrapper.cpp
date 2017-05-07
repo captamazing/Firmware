@@ -5,8 +5,8 @@
  ****************************************************************************/
 
 /**
- * @file df_ads1115_wrapper.cpp
- * Lightweight driver to access the ADS1115 and publish output as battery status
+ * @file df_ursarcin_wrapper.cpp
+ * Lightweight driver to access the RC rx PPM driver
  */
 
 #include <px4_config.h>
@@ -31,20 +31,20 @@
 
 #include <board_config.h>
 
-#include <ads1115/ADS1115.hpp>
+#include <ursa_rcin/ursa_rcin.hpp>
 #include <DevMgr.hpp>
 
 
-extern "C" { __EXPORT int df_ads1115_wrapper_main(int argc, char *argv[]); }
+extern "C" { __EXPORT int df_ursarcin_wrapper_main(int argc, char *argv[]); }
 
 using namespace DriverFramework;
 
 
-class DfADS1115Wrapper : public ADS1115
+class DfRCINWrapper : public RC_IN
 {
 public:
-	DfADS1115Wrapper();
-	~DfADS1115Wrapper();
+	DfRCINWrapper();
+	~DfRCINWrapper();
 
 
 	/**
@@ -62,68 +62,56 @@ public:
 	int		stop();
 
 private:
-	int _publish(struct adc_sensor_data &data);
-
-	orb_advert_t		_batt_topic;
-
-	int			_batt_orb_class_instance;
-
-	perf_counter_t		_batt_sample_perf;
-
 };
 
-DfADS1115Wrapper::DfADS1115Wrapper() :
-	ADS1115(ADC_DEVICE_PATH),
-	_batt_topic(nullptr),
-	_batt_orb_class_instance(-1),
-	_batt_sample_perf(perf_alloc(PC_ELAPSED, "df_batt_read"))
+DfRCINWrapper::DfRCINWrapper() :
+	RC_IN(RC_DEV_PATH)
 {
 }
 
-DfADS1115Wrapper::~DfADS1115Wrapper()
+DfRCINWrapper::~DfRCINWrapper()
 {
-	perf_free(_batt_sample_perf);
 }
 
-int DfADS1115Wrapper::start()
+int DfRCINWrapper::start()
 {
 	/* Init device and start sensor. */
 	int ret = init();
 
 	if (ret != 0) {
-		PX4_ERR("ADS1115 init fail: %d", ret);
+		PX4_ERR("RC init fail: %d", ret);
 		return ret;
 	}
 
-	ret = ADS1115::start();
+	ret = RC_IN::start();
 
 	if (ret != 0) {
-		PX4_ERR("ADS1115 start fail: %d", ret);
+		PX4_ERR("RC start fail: %d", ret);
 		return ret;
 	}
 
 	return 0;
 }
 
-int DfADS1115Wrapper::stop()
+int DfRCINWrapper::stop()
 {
 	/* Stop sensor. */
-	int ret = ADS1115::stop();
+	int ret = RC_IN::stop();
 	if (ret != 0) {
-		PX4_ERR("ADC stop fail: %d", ret);
+		PX4_ERR("RC stop fail: %d", ret);
 		return ret;
 	}
 
-	PX4_INFO("Stopping ADS1115 Wrapper...");
+	PX4_INFO("Stopping RC Wrapper...");
 
 	return 0;
 }
 
 
-namespace df_ads1115_wrapper
+namespace df_ursarcin_wrapper
 {
 
-DfADS1115Wrapper *g_dev = nullptr;
+DfRCINWrapper *g_dev = nullptr;
 
 int start();
 int stop();
@@ -132,31 +120,19 @@ void usage();
 
 int start()
 {
-	g_dev = new DfADS1115Wrapper();
+	g_dev = new DfRCINWrapper();
 
 	if (g_dev == nullptr) {
-		PX4_ERR("failed instantiating DfADS1115Wrapper object");
+		PX4_ERR("failed instantiating DfRCINWrapper object");
 		return -1;
 	}
 
 	int ret = g_dev->start();
 
 	if (ret != 0) {
-		PX4_ERR("DfADS1115Wrapper start failed");
+		PX4_ERR("DfRCINWrapper start failed");
 		return ret;
 	}
-
-	// Test open the ADC
-	DevHandle h;
-	DevMgr::getHandle(ADC_DEVICE_PATH, h);
-
-	if (!h.isValid()) {
-		DF_LOG_INFO("Error: unable to obtain a valid handle for the ADC at: %s (%d)",
-			   	ADC_DEVICE_PATH, h.getError());
-		return -1;
-	}
-
-	DevMgr::releaseHandle(h);
 
 	return 0;
 }
@@ -164,14 +140,14 @@ int start()
 int stop()
 {
 	if (g_dev == nullptr) {
-		PX4_ERR("DfADS1115Wrapper tried to stop but driver not running");
+		PX4_ERR("dfURSARCINWrapper tried to stop but driver not running");
 		return 1;
 	}
 
 	int ret = g_dev->stop();
 
 	if (ret != 0) {
-		PX4_ERR("DfADS1115Wrapper - driver could not be stopped");
+		PX4_ERR("dfURSARCINWrapper - driver could not be stopped");
 		return ret;
 	}
 
@@ -199,20 +175,20 @@ info()
 void
 usage()
 {
-	PX4_WARN("Usage: df_ads1115_wrapper 'start', 'info', 'stop'");
+	PX4_WARN("Usage: df_ursarcin_wrapper 'start', 'info', 'stop'");
 }
 
-} // namespace df_ads1115_wrapper
+} // namespace df_ursarcin_wrapper
 
 
 int
-df_ads1115_wrapper_main(int argc, char *argv[])
+df_ursarcin_wrapper_main(int argc, char *argv[])
 {
 	int ret = 0;
 	int myoptind = 1;
 
 	if (argc <= 1) {
-		df_ads1115_wrapper::usage();
+		df_ursarcin_wrapper::usage();
 		return 1;
 	}
 
@@ -220,19 +196,19 @@ df_ads1115_wrapper_main(int argc, char *argv[])
 
 
 	if (!strcmp(verb, "start")) {
-		ret = df_ads1115_wrapper::start();
+		ret = df_ursarcin_wrapper::start();
 	}
 
 	else if (!strcmp(verb, "stop")) {
-		ret = df_ads1115_wrapper::stop();
+		ret = df_ursarcin_wrapper::stop();
 	}
 
 	else if (!strcmp(verb, "info")) {
-		ret = df_ads1115_wrapper::info();
+		ret = df_ursarcin_wrapper::info();
 	}
 
 	else {
-		df_ads1115_wrapper::usage();
+		df_ursarcin_wrapper::usage();
 		return 1;
 	}
 
