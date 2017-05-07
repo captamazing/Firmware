@@ -4,6 +4,8 @@
  *
  ****************************************************************************/
 
+//Driver framework driver - PPM RC IN using DMA
+
 #pragma once
 
 #include "DevObj.hpp"
@@ -37,25 +39,10 @@ public:
 protected:
 	void _measure();
 	int devRead(void *buf, size_t count);
-	struct adc_msg_s _buf_adc[ADS1115_CHANNEL_COUNT]; 
-	uint32_t m_temperature_from_sensor;
 	SyncObj 			m_synchronize;
 
-	// Request to convert voltage or current data
-	int _configWrite(uint16_t cmd);
-	// Read out the requested sensor data
-	int _collect(int32_t &raw);
-
-
-	/* Channel 2 is voltage, 3 is current */
-	static const uint16_t mux_table[ADS1115_CHANNEL_COUNT];
-
 	// returns 0 on success, -errno on failure
-	int ads1115_init();
-
-	// Send reset to device
-	int m_measure_channel;
-	int m_gain;
+	int rc_in_init();
 };
 
 }; // namespace DriverFramework

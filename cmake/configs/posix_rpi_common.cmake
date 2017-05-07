@@ -117,4 +117,5 @@ set(config_df_driver_list
 	trone
 	isl29501
 	ads1115
+	ursa_rc_in
 )
