@@ -25,6 +25,7 @@ set(config_module_list
 	platforms/posix/drivers/df_isl29501_wrapper
 	platforms/posix/drivers/df_ads1115_wrapper
 	platforms/posix/drivers/df_ursarcin_wrapper
+	platforms/posix/drivers/df_ursapwm_wrapper
 
 	#
 	# System commands
@@ -119,4 +120,6 @@ set(config_df_driver_list
 	isl29501
 	ads1115
 	ursa_rcin
+	pca9685
+	common
 )
