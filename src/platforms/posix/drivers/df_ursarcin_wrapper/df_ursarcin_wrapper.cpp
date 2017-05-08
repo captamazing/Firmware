@@ -25,9 +25,9 @@
 #include <systemlib/perf_counter.h>
 #include <systemlib/err.h>
 
-#include <drivers/drv_baro.h>
 #include <drivers/drv_hrt.h>
-#include <uORB/topics/battery_status.h>
+#include <uORB/uORB.h>
+#include <uORB/topics/input_rc.h>
 
 #include <board_config.h>
 
@@ -38,6 +38,8 @@
 extern "C" { __EXPORT int df_ursarcin_wrapper_main(int argc, char *argv[]); }
 
 using namespace DriverFramework;
+
+#define LINUX_RC_INPUT_NUM_CHANNELS 16
 
 
 class DfRCINWrapper : public RC_IN
@@ -62,10 +64,21 @@ public:
 	int		stop();
 
 private:
+
+	int _process_rc_pulse(uint16_t width_usec);
+	int _publish();
+	struct input_rc_s _rcdata;
+	//uint16_t _pulse_capt[LINUX_RC_INPUT_NUM_CHANNELS];
+	uint8_t  _num_channels;
+	int _channel_counter;
+	orb_advert_t _rc_topic;
+
 };
 
 DfRCINWrapper::DfRCINWrapper() :
-	RC_IN(RC_DEV_PATH)
+	RC_IN(RC_DEV_PATH),
+	_channel_counter(0),
+	_rc_topic(nullptr)
 {
 }
 
@@ -90,6 +103,18 @@ int DfRCINWrapper::start()
 		return ret;
 	}
 
+	// Test open the RC
+	DevHandle h;
+	DevMgr::getHandle(RC_DEV_PATH, h);
+
+	if (!h.isValid()) {
+		DF_LOG_INFO("Error: unable to obtain a valid handle for the RC at: %s (%d)",
+			   	RC_DEV_PATH, h.getError());
+		return -1;
+	}
+
+	DevMgr::releaseHandle(h);
+
 	return 0;
 }
 
@@ -104,6 +129,68 @@ int DfRCINWrapper::stop()
 
 	PX4_INFO("Stopping RC Wrapper...");
 
+	return 0;
+}
+
+int DfRCINWrapper::_process_rc_pulse(uint16_t width_usec){
+	if (width_usec >= 2700) {
+        // a long pulse indicates the end of a frame. Reset the
+        // channel counter so next pulse is channel 0 and publish to uORB
+        if (_channel_counter >= 0) {
+            _rcdata.channel_count = _channel_counter;
+            _publish();
+        }
+        _channel_counter = 0;
+        return 0;
+    }
+    if (_channel_counter == -1) {
+        // we are not synchronised
+        return 0;
+    }
+
+    /*
+      we limit inputs to between 700usec and 2300usec. This allows us
+      to decode SBUS on the same pin, as SBUS will have a maximum
+      pulse width of 100usec
+     */
+    if (width_usec > 700 && width_usec < 2300) {
+        // take a reading for the current channel
+        // buffer these
+        _rcdata.values[_channel_counter] = width_usec;
+
+        // move to next channel
+        _channel_counter++;
+    }
+
+    // if we have reached the maximum supported channels then
+    // mark as unsynchronised, so we wait for a wide pulse
+    if (_channel_counter >= LINUX_RC_INPUT_NUM_CHANNELS) {
+        _rcdata.channel_count = _channel_counter;
+        _channel_counter = -1;
+    }
+
+    return 0;
+}
+
+int DfRCINWrapper::_publish(){
+
+	uint64_t ts = hrt_absolute_time();
+	_rcdata.timestamp = ts;
+	_rcdata.timestamp_last_signal = ts;
+	_rcdata.rssi = 100;
+	_rcdata.rc_lost_frame_count = 0;
+	_rcdata.rc_total_frame_count = 1;
+	_rcdata.rc_ppm_frame_length = 100;
+	_rcdata.rc_failsafe = false;
+	_rcdata.rc_lost = false;
+	_rcdata.input_source = input_rc_s::RC_INPUT_SOURCE_PX4IO_PPM;
+
+	if (_rc_topic == nullptr) {
+		_rc_topic = orb_advertise(ORB_ID(input_rc), &_rcdata);
+
+	} else {
+		orb_publish(ORB_ID(input_rc), _rc_topic, &_rcdata);
+	}
 	return 0;
 }
 

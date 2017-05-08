@@ -613,9 +613,9 @@ int main(int argc, char **argv)
 		run_cmd(muorb_stop_cmd, !daemon_mode, true);
 	}
 
+	DriverFramework::Framework::shutdown();
 	vector<string> shutdown_cmd = { "shutdown" };
 	run_cmd(shutdown_cmd, true);
-	DriverFramework::Framework::shutdown();
 
 	return OK;
 }
