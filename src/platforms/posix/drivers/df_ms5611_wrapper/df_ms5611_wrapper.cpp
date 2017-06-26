@@ -180,7 +180,13 @@ int DfMS5611Wrapper::_publish(struct baro_sensor_data &data)
 	 * h = -------------------------------  + h1
 	 *                   a
 	 */
-	baro_report.altitude = (((pow((p / p1), (-(a * R) / g))) * T1) - T1) / a;
+	if (p>0){
+		baro_report.altitude = (((pow((p / p1), (-(a * R) / g))) * T1) - T1) / a;
+	} else {
+		baro_report.altitude = 0;
+	}
+
+	
 
 	// TODO: when is this ever blocked?
 	if (!(m_pub_blocked)) {

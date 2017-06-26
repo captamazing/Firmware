@@ -240,7 +240,6 @@ void DfPWMWrapper::send_outputs_pwm(const uint16_t *pwm)
     //convert this to duty_cycle in ns
     for (unsigned i = 0; i < NUM_PWM; ++i) {
         write(i, pwm[i]);
-        PX4_INFO("Wrote PWM output %d: %d",i,pwm[i]);
     }
     push();
 }

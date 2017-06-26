@@ -751,7 +751,6 @@ void Ekf2::task_main()
 			orb_copy(ORB_ID(vehicle_land_detected), vehicle_land_detected_sub, &vehicle_land_detected);
 			_ekf.set_in_air_status(!vehicle_land_detected.landed);
 		}
-
 		// run the EKF update and output
 		if (_ekf.update()) {
 

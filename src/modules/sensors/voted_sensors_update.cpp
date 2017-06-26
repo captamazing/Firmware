@@ -906,8 +906,9 @@ void VotedSensorsUpdate::baro_poll(struct sensor_combined_s &raw)
 			 * h = -------------------------------  + h1
 			 *                   a
 			 */
-			raw.baro_alt_meter = (((pow((p / p1), (-(a * R) / g))) * T1) - T1) / a;
-
+			if (p>0){ //Hack to fix occasional negative readings from baro
+				raw.baro_alt_meter = (((pow((p / p1), (-(a * R) / g))) * T1) - T1) / a;
+			}
 		}
 	}
 }
