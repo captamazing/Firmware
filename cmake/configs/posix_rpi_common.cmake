@@ -24,8 +24,9 @@ set(config_module_list
 	platforms/posix/drivers/df_trone_wrapper
 	platforms/posix/drivers/df_isl29501_wrapper
 	platforms/posix/drivers/df_ads1115_wrapper
-	platforms/posix/drivers/df_ursarcin_wrapper
+	#platforms/posix/drivers/df_ursarcin_wrapper
 	platforms/posix/drivers/df_ursapwm_wrapper
+	platforms/posix/drivers/df_ursagpio_wrapper
 
 	#
 	# System commands
@@ -119,7 +120,8 @@ set(config_df_driver_list
 	trone
 	isl29501
 	ads1115
-	ursa_rcin
+	#ursa_rcin
+	ursa_gpio
 	pca9685
 	common
 )
