@@ -111,11 +111,11 @@ int DfGPIOWrapper::stop()
 	/* Stop sensor. */
 	int ret = GPIO_TIMED::stop();
 	if (ret != 0) {
-		PX4_ERR("RC stop fail: %d", ret);
+		PX4_ERR("GPIO stop fail: %d", ret);
 		return ret;
 	}
 
-	PX4_INFO("Stopping RC Wrapper...");
+	PX4_INFO("Stopping GPIO Wrapper...");
 
 	return 0;
 }
