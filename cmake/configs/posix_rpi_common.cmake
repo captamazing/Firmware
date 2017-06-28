@@ -27,6 +27,7 @@ set(config_module_list
 	platforms/posix/drivers/df_ursapwm_wrapper
 	platforms/posix/drivers/df_ursagpio_wrapper
 	platforms/posix/drivers/ursa_rcin
+	platforms/posix/drivers/ursa_sonar
 
 	#
 	# System commands

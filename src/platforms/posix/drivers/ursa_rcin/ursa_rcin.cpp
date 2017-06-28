@@ -87,19 +87,22 @@ UrsaRCINPub::~UrsaRCINPub()
 
 int UrsaRCINPub::init(int gpio)
 {
+    // Get a handle to our timed GPIO DMA magic
     DevHandle h;
-    DevMgr::getHandle(GPIO_DEV_PATH, h); // Get a handle to our timed GPIO DMA magic
+    DevMgr::getHandle(GPIO_DEV_PATH, h); 
 
     if (!h.isValid()) {
         PX4_ERR("Failed to get handle to timed GPIO device");
         return -1;
     }
 
+    // Setup the callback struct which we'll pass to the timed GPIO device
     callbackStruct.callback=std::bind(&UrsaRCINPub::process_rc_pulse, this, std::placeholders::_1);
     callbackStruct.pin=gpio;
     callbackStruct.type=GPIO_CALLBACK_TOTALTIME;
     h.write((void*)&callbackStruct,sizeof(gpio_callback_t));
 
+    // Don't need this handle anymore
     DevMgr::releaseHandle(h);
 
     return 0;
@@ -180,7 +183,7 @@ int UrsaRCINPub::_publish(){
 
 namespace ursa_rcin
 {
-
+// Singleton since we only want/need one
 UrsaRCINPub *g_dev = nullptr;
 
 int start();
