@@ -203,6 +203,8 @@ static hrt_abstime last_gpos_fail_time_us = 0;	// Last time that the global posi
 static hrt_abstime last_lvel_fail_time_us = 0;	// Last time that the local velocity validity recovery check failed (usec)
 static hrt_abstime last_gvel_fail_time_us = 0;	// Last time that the global velocity validity recovery check failed (usec)
 
+static hrt_abstime gpos_last_update_time_us = 0; // last time a global position update was received (usec)
+
 /* pre-flight EKF checks */
 static float max_ekf_pos_ratio = 0.5f;
 static float max_ekf_vel_ratio = 0.5f;
@@ -926,7 +928,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 				transition_result_t arming_res = arm_disarm(cmd_arms, &mavlink_log_pub, "arm/disarm component command");
 
 				if (arming_res == TRANSITION_DENIED) {
-					mavlink_log_critical(&mavlink_log_pub, "REJECTING component arm cmd");
+					mavlink_log_critical(&mavlink_log_pub, "Arming not possible in this state");
 					cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_TEMPORARILY_REJECTED;
 
 				} else {
@@ -943,38 +945,6 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 		}
 		break;
 
-	case vehicle_command_s::VEHICLE_CMD_OVERRIDE_GOTO: {
-			// TODO listen vehicle_command topic directly from navigator (?)
-
-			// Increase by 0.5f and rely on the integer cast
-			// implicit floor(). This is the *safest* way to
-			// convert from floats representing small ints to actual ints.
-			unsigned int mav_goto = (cmd->param1 + 0.5f);
-
-			if (mav_goto == 0) {	// MAV_GOTO_DO_HOLD
-				status_local->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER;
-				mavlink_log_critical(&mavlink_log_pub, "Pause mission cmd");
-				cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
-
-			} else if (mav_goto == 1) {	// MAV_GOTO_DO_CONTINUE
-				status_local->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_MISSION;
-				mavlink_log_critical(&mavlink_log_pub, "Continue mission cmd");
-				cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_ACCEPTED;
-
-			} else {
-				mavlink_log_critical(&mavlink_log_pub, "REJ CMD: %.1f %.1f %.1f %.1f %.1f %.1f %.1f",
-						     (double)cmd->param1,
-						     (double)cmd->param2,
-						     (double)cmd->param3,
-						     (double)cmd->param4,
-						     (double)cmd->param5,
-						     (double)cmd->param6,
-						     (double)cmd->param7);
-			}
-		}
-		break;
-
-		/* Flight termination */
 	case vehicle_command_s::VEHICLE_CMD_DO_FLIGHTTERMINATION: {
 			if (cmd->param1 > 1.5f) {
 				armed_local->lockdown = true;
@@ -1224,6 +1194,8 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 	case vehicle_command_s::VEHICLE_CMD_DO_TRIGGER_CONTROL:
 	case vehicle_command_s::VEHICLE_CMD_DO_DIGICAM_CONTROL:
 	case vehicle_command_s::VEHICLE_CMD_DO_SET_CAM_TRIGG_DIST:
+	case vehicle_command_s::VEHICLE_CMD_DO_SET_CAM_TRIGG_INTERVAL:
+	case vehicle_command_s::VEHICLE_CMD_SET_CAMERA_MODE:
 	case vehicle_command_s::VEHICLE_CMD_DO_CHANGE_SPEED:
 	case vehicle_command_s::VEHICLE_CMD_DO_LAND_START:
 	case vehicle_command_s::VEHICLE_CMD_DO_GO_AROUND:
@@ -1377,6 +1349,9 @@ int commander_thread_main(int argc, char *argv[])
 	/* pre-flight IMU consistency checks */
 	param_t _param_max_imu_acc_diff = param_find("COM_ARM_IMU_ACC");
 	param_t _param_max_imu_gyr_diff = param_find("COM_ARM_IMU_GYR");
+
+	/* failsafe response to loss of navigation accuracy */
+	param_t _param_posctl_nav_loss_act = param_find("COM_POSCTL_NAVL");
 
 	// These are too verbose, but we will retain them a little longer
 	// until we are sure we really don't need them.
@@ -1757,6 +1732,7 @@ int commander_thread_main(int argc, char *argv[])
 	float offboard_loss_timeout = 0.0f;
 	int32_t offboard_loss_act = 0;
 	int32_t offboard_loss_rc_act = 0;
+	int32_t posctl_nav_loss_act = 0;
 
 	int32_t geofence_action = 0;
 
@@ -1905,6 +1881,9 @@ int commander_thread_main(int argc, char *argv[])
 			/* pre-flight IMU consistency checks */
 			param_get(_param_max_imu_acc_diff, &max_imu_acc_diff);
 			param_get(_param_max_imu_gyr_diff, &max_imu_gyr_diff);
+
+			/* failsafe response to loss of navigation accuracy */
+			param_get(_param_posctl_nav_loss_act, &posctl_nav_loss_act);
 
 			param_init_forced = false;
 		}
@@ -2105,7 +2084,6 @@ int commander_thread_main(int argc, char *argv[])
 										  arm_without_gps,
 										  arm_mission_required,
 										  hrt_elapsed_time(&commander_boot_timestamp))) {
-					mavlink_log_info(&mavlink_log_pub, "DISARMED by safety switch");
 					arming_state_changed = true;
 				}
 			}
@@ -2149,14 +2127,23 @@ int commander_thread_main(int argc, char *argv[])
 		// Check if quality checking of position accuracy and consistency is to be performed
 		bool run_quality_checks = !status_flags.circuit_breaker_engaged_posfailure_check;
 
-		/* update global position estimate */
+		/* update global position estimate and check for timeout */
 		bool gpos_updated =  false;
 		orb_check(global_position_sub, &gpos_updated);
-
 		if (gpos_updated) {
-			/* position changed */
 			orb_copy(ORB_ID(vehicle_global_position), global_position_sub, &global_position);
+			gpos_last_update_time_us = hrt_absolute_time();
+		}
 
+		// Perform a separate timeout validity test on the global position data.
+		// This is necessary because the global position message is by definition valid if published.
+		if ((hrt_absolute_time() - gpos_last_update_time_us) > 1000000) {
+			status_flags.condition_global_position_valid = false;
+			status_flags.condition_global_velocity_valid = false;
+		}
+
+		/* run global position accuracy checks */
+		if (gpos_updated) {
 			if (run_quality_checks) {
 				check_posvel_validity(true, global_position.eph, eph_threshold, global_position.timestamp, &last_gpos_fail_time_us, &gpos_probation_time_us, &status_flags.condition_global_position_valid, &status_changed);
 				check_posvel_validity(true, global_position.evh, evh_threshold, global_position.timestamp, &last_gvel_fail_time_us, &gvel_probation_time_us, &status_flags.condition_global_velocity_valid, &status_changed);
@@ -2469,7 +2456,9 @@ int commander_thread_main(int argc, char *argv[])
 			} else if (!status_flags.gps_failure) {
 				status_flags.gps_failure = true;
 				status_changed = true;
-				mavlink_log_critical(&mavlink_log_pub, "GPS fix lost");
+				if (status.arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
+					mavlink_log_critical(&mavlink_log_pub, "GPS fix lost");
+				}
 			}
 
 		}
@@ -2779,13 +2768,6 @@ int commander_thread_main(int argc, char *argv[])
 			_last_sp_man_arm_switch = sp_man.arm_switch;
 
 			if (arming_ret == TRANSITION_CHANGED) {
-				if (status.arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
-					mavlink_log_info(&mavlink_log_pub, "ARMED by RC");
-
-				} else {
-					mavlink_log_info(&mavlink_log_pub, "DISARMED by RC");
-				}
-
 				arming_state_changed = true;
 
 			} else if (arming_ret == TRANSITION_DENIED) {
@@ -2812,7 +2794,7 @@ int commander_thread_main(int argc, char *argv[])
 
 			} else if (main_res == TRANSITION_DENIED) {
 				/* DENIED here indicates bug in the commander */
-				mavlink_log_critical(&mavlink_log_pub, "main state transition denied");
+				mavlink_log_critical(&mavlink_log_pub, "Switching to this mode is currently not possible");
 			}
 
 			/* check throttle kill switch */
@@ -3065,7 +3047,8 @@ int commander_thread_main(int argc, char *argv[])
 											   land_detector.landed,
 											   (link_loss_actions_t)rc_loss_act,
 											   offboard_loss_act,
-											   offboard_loss_rc_act);
+											   offboard_loss_rc_act,
+											   posctl_nav_loss_act);
 
 		if (status.failsafe != failsafe_old)
 		{
@@ -3450,7 +3433,6 @@ set_main_state_rc(struct vehicle_status_s *status_local, vehicle_global_position
 
 	/* RTL switch overrides main switch */
 	if (sp_man.return_switch == manual_control_setpoint_s::SWITCH_POS_ON) {
-		warnx("RTL switch changed and ON!");
 		res = main_state_transition(status_local, commander_state_s::MAIN_STATE_AUTO_RTL, main_state_prev, &status_flags, &internal_state);
 
 		if (res == TRANSITION_DENIED) {
@@ -3783,7 +3765,7 @@ check_posvel_validity(bool data_valid, float data_accuracy, float required_accur
 
 	// Check accuracy with hysteresis in both test level and time
 	bool pos_status_changed = false;
-	if (*valid_state && data_accuracy > required_accuracy * 2.5f) {
+	if (*valid_state && ((data_accuracy > required_accuracy * 2.5f) || !data_valid)) {
 		pos_inaccurate = true;
 		pos_status_changed = true;
 		*last_fail_time_us = now;

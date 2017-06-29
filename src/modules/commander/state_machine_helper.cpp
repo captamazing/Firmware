@@ -351,12 +351,7 @@ bool is_safe(const struct safety_s *safety, const struct actuator_armed_s *armed
 	// 3) Safety switch is present AND engaged -> actuators locked
 	const bool lockdown = (armed->lockdown || armed->manual_lockdown);
 
-	if (!armed->armed || (armed->armed && lockdown) || (safety->safety_switch_available && !safety->safety_off)) {
-		return true;
-
-	} else {
-		return false;
-	}
+	return !armed->armed || (armed->armed && lockdown) || (safety->safety_switch_available && !safety->safety_off);
 }
 
 transition_result_t
@@ -549,7 +544,8 @@ bool set_nav_state(struct vehicle_status_s *status,
 		   bool landed,
 		   const link_loss_actions_t rc_loss_act,
 		   const int offb_loss_act,
-		   const int offb_loss_rc_act)
+		   const int offb_loss_rc_act,
+		   const int posctl_nav_loss_act)
 {
 	navigation_state_t nav_state_old = status->nav_state;
 
@@ -622,7 +618,7 @@ bool set_nav_state(struct vehicle_status_s *status,
 				 * this enables POSCTL using e.g. flow.
 				 * For fixedwing, a global position is needed. */
 
-			} else if (is_armed && check_invalid_pos_nav_state(status, old_failsafe, mavlink_log_pub, status_flags, true, status->is_rotary_wing)) {
+			} else if (is_armed && check_invalid_pos_nav_state(status, old_failsafe, mavlink_log_pub, status_flags, !(posctl_nav_loss_act == 1), !status->is_rotary_wing)) {
 				// nothing to do - everything done in check_invalid_pos_nav_state
 			} else {
 				status->nav_state = vehicle_status_s::NAVIGATION_STATE_POSCTL;
@@ -812,7 +808,7 @@ bool set_nav_state(struct vehicle_status_s *status,
 		if (status_flags->offboard_control_signal_lost && !status->rc_signal_lost) {
 			enable_failsafe(status, old_failsafe, mavlink_log_pub, reason_no_offboard);
 
-			if (status_flags->offboard_control_loss_timeout && offb_loss_rc_act < 5 && offb_loss_rc_act >= 0) {
+			if (status_flags->offboard_control_loss_timeout && offb_loss_rc_act < 6 && offb_loss_rc_act >= 0) {
 				if (offb_loss_rc_act == 3 && status_flags->condition_global_position_valid
 				    && status_flags->condition_home_position_valid) {
 					status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_RTL;
@@ -828,6 +824,9 @@ bool set_nav_state(struct vehicle_status_s *status,
 
 				} else if (offb_loss_rc_act == 4 && status_flags->condition_global_position_valid) {
 					status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LAND;
+
+				} else if (offb_loss_rc_act == 5 && status_flags->condition_global_position_valid) {
+					status->nav_state = vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER;
 
 				} else if (status_flags->condition_local_altitude_valid) {
 					status->nav_state = vehicle_status_s::NAVIGATION_STATE_DESCEND;
@@ -1040,7 +1039,7 @@ int preflight_check(struct vehicle_status_s *status, orb_advert_t *mavlink_log_p
 		}
 	}
 
-	if (battery->warning == battery_status_s::BATTERY_WARNING_LOW) {
+	if (battery->warning >= battery_status_s::BATTERY_WARNING_LOW) {
 		preflight_ok = false;
 
 		if (reportFailures) {

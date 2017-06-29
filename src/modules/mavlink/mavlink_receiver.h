@@ -56,7 +56,6 @@
 #include <uORB/topics/offboard_control_mode.h>
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
-#include <uORB/topics/vehicle_global_velocity_setpoint.h>
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/att_pos_mocap.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
@@ -80,7 +79,10 @@
 #include <uORB/topics/collision_report.h>
 
 
+#include "mavlink_mission.h"
+#include "mavlink_parameters.h"
 #include "mavlink_ftp.h"
+#include "mavlink_log_handler.h"
 
 #define PX4_EPOCH_SECS 1234567890ULL
 
@@ -100,17 +102,13 @@ public:
 	~MavlinkReceiver();
 
 	/**
-	* Start the mavlink task.
-	 *
-	 * @return		OK on success.
-	 */
-	int		start();
-
-	/**
 	 * Display the mavlink status.
 	 */
 	void		print_status();
 
+	/**
+	 * Start the receiver thread
+	 */
 	static void receive_start(pthread_t *thread, Mavlink *parent);
 
 	static void *start_helper(void *context);
@@ -192,9 +190,15 @@ private:
 	bool	evaluate_target_ok(int command, int target_system, int target_component);
 
 	Mavlink	*_mavlink;
-	mavlink_status_t status;
-	struct vehicle_local_position_s hil_local_pos;
-	struct vehicle_land_detected_s hil_land_detector;
+
+	MavlinkMissionManager		_mission_manager;
+	MavlinkParametersManager	_parameters_manager;
+	MavlinkFTP			_mavlink_ftp;
+	MavlinkLogHandler		_mavlink_log_handler;
+
+	mavlink_status_t _status; ///< receiver status, used for mavlink_parse_char()
+	struct vehicle_local_position_s _hil_local_pos;
+	struct vehicle_land_detected_s _hil_land_detector;
 	struct vehicle_control_mode_s _control_mode;
 	orb_advert_t _global_pos_pub;
 	orb_advert_t _local_pos_pub;
@@ -257,7 +261,6 @@ private:
 	param_t _p_bat_crit_thr;
 	param_t _p_bat_low_thr;
 
-	/* do not allow copying this class */
-	MavlinkReceiver(const MavlinkReceiver &);
-	MavlinkReceiver operator=(const MavlinkReceiver &);
+	MavlinkReceiver(const MavlinkReceiver &) = delete;
+	MavlinkReceiver operator=(const MavlinkReceiver &) = delete;
 };

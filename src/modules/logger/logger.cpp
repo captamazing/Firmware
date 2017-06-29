@@ -576,7 +576,6 @@ void Logger::add_default_topics()
 	add_topic("vehicle_local_position", 100);
 	add_topic("vehicle_local_position_setpoint", 100);
 	add_topic("vehicle_global_position", 200);
-	add_topic("vehicle_global_velocity_setpoint", 200);
 	add_topic("vehicle_vision_position");
 	add_topic("vehicle_vision_attitude");
 	add_topic("battery_status", 300);
@@ -594,6 +593,7 @@ void Logger::add_default_topics()
 	add_topic("wind_estimate", 100);
 	add_topic("control_state", 100);
 	add_topic("camera_trigger");
+	add_topic("camera_capture");
 	add_topic("cpuload");
 	add_topic("gps_dump"); //this will only be published if GPS_DUMP_COMM is set
 	add_topic("sensor_preflight", 50);

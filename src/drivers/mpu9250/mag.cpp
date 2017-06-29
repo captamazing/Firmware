@@ -205,6 +205,7 @@ MPU9250_mag::_measure(struct ak8963_regs data)
 
 	mag_report	mrb;
 	mrb.timestamp = hrt_absolute_time();
+	mrb.is_external = false;
 
 	/*
 	 * Align axes - note the accel & gryo are also re-aligned so this
@@ -227,7 +228,7 @@ MPU9250_mag::_measure(struct ak8963_regs data)
 	mrb.range_ga = 48.0f;
 	mrb.scaling = _mag_range_scale;
 	mrb.temperature = _parent->_last_temperature;
-	mrb.device_id = _parent->get_device_id().devid;
+	mrb.device_id = _parent->_mag->_device_id.devid;
 
 	mrb.error_count = perf_event_count(_mag_errors);
 

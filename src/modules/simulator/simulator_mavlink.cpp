@@ -528,7 +528,7 @@ void Simulator::poll_topics()
 	}
 }
 
-void *Simulator::sending_trampoline(void *)
+void *Simulator::sending_trampoline(void * /*unused*/)
 {
 	_instance->send();
 	return nullptr;
@@ -619,7 +619,9 @@ void Simulator::pollForMAVLinkMessages(bool publish, int udp_port)
 	struct sockaddr_in _myaddr;
 
 	if (udp_port < 1) {
-		udp_port = UDP_PORT;
+		int prt;
+		param_get(param_find("SITL_UDP_PRT"), &prt);
+		udp_port = prt;
 	}
 
 	// try to setup udp socket for communcation with simulator

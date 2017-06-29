@@ -101,6 +101,7 @@
 #define MAX_DATA_RATE				10000000	///< max data rate in bytes/s
 #define MAIN_LOOP_DELAY 			10000	///< 100 Hz @ 1000 bytes/s data rate
 #define FLOW_CONTROL_DISABLE_THRESHOLD		40	///< picked so that some messages still would fit it.
+//#define MAVLINK_PRINT_PACKETS
 
 static Mavlink *_mavlink_instances = nullptr;
 
@@ -119,6 +120,13 @@ void mavlink_send_uart_bytes(mavlink_channel_t chan, const uint8_t *ch, int leng
 
 	if (m != nullptr) {
 		m->send_bytes(ch, length);
+#ifdef MAVLINK_PRINT_PACKETS
+
+		for (unsigned i = 0; i < length; i++) {
+			printf("%02x", (unsigned char)ch[i]);
+		}
+
+#endif
 	}
 }
 
@@ -128,6 +136,9 @@ void mavlink_start_uart_send(mavlink_channel_t chan, int length)
 
 	if (m != nullptr) {
 		(void)m->begin_send();
+#ifdef MAVLINK_PRINT_PACKETS
+		printf("START PACKET (%u): ", (unsigned)chan);
+#endif
 	}
 }
 
@@ -137,6 +148,9 @@ void mavlink_end_uart_send(mavlink_channel_t chan, int length)
 
 	if (m != nullptr) {
 		(void)m->send_packet();
+#ifdef MAVLINK_PRINT_PACKETS
+		printf("\n");
+#endif
 	}
 }
 
@@ -194,10 +208,6 @@ Mavlink::Mavlink() :
 	_main_loop_delay(1000),
 	_subscriptions(nullptr),
 	_streams(nullptr),
-	_mission_manager(nullptr),
-	_parameters_manager(nullptr),
-	_mavlink_ftp(nullptr),
-	_mavlink_log_handler(nullptr),
 	_mavlink_shell(nullptr),
 	_mavlink_ulog(nullptr),
 	_mavlink_ulog_stop_requested(false),
@@ -254,7 +264,6 @@ Mavlink::Mavlink() :
 	_message_buffer_mutex {},
 	_send_mutex {},
 	_param_initialized(false),
-	_logging_enabled(false),
 	_broadcast_mode(Mavlink::BROADCAST_MODE_OFF),
 	_param_system_id(PARAM_INVALID),
 	_param_component_id(PARAM_INVALID),
@@ -1234,17 +1243,9 @@ Mavlink::handle_message(const mavlink_message_t *msg)
 		return;
 	}
 
-	/* handle packet with mission manager */
-	_mission_manager->handle_message(msg);
-
-	/* handle packet with parameter component */
-	_parameters_manager->handle_message(msg);
-
-	/* handle packet with ftp component */
-	_mavlink_ftp->handle_message(msg);
-
-	/* handle packet with log component */
-	_mavlink_log_handler->handle_message(msg);
+	/*
+	 *  NOTE: this is called from the receiver thread
+	 */
 
 	if (get_forwarding_on()) {
 		/* forward any messages to other mavlink instances */
@@ -1313,6 +1314,27 @@ void Mavlink::send_autopilot_capabilites()
 
 		mavlink_msg_autopilot_version_send_struct(get_channel(), &msg);
 	}
+}
+
+void Mavlink::send_protocol_version()
+{
+	mavlink_protocol_version_t msg = {};
+
+	msg.version = _protocol_version * 100;
+	msg.min_version = 100;
+	msg.max_version = 200;
+	uint64_t mavlink_lib_git_version_binary = px4_mavlink_lib_version_binary();
+	// TODO add when available
+	//memcpy(&msg.spec_version_hash, &mavlink_spec_git_version_binary, sizeof(msg.spec_version_hash));
+	memcpy(&msg.library_version_hash, &mavlink_lib_git_version_binary, sizeof(msg.library_version_hash));
+
+	// Switch to MAVLink 2
+	int curr_proto_ver = _protocol_version;
+	set_proto_version(2);
+	// Send response - if it passes through the link its fine to use MAVLink 2
+	mavlink_msg_protocol_version_send_struct(get_channel(), &msg);
+	// Reset to previous value
+	set_proto_version(curr_proto_ver);
 }
 
 MavlinkOrbSubscription *Mavlink::add_orb_subscription(const orb_id_t topic, int instance)
@@ -1960,29 +1982,6 @@ Mavlink::task_main(int argc, char *argv[])
 
 	}
 
-	/* PARAM_VALUE stream */
-	_parameters_manager = (MavlinkParametersManager *) MavlinkParametersManager::new_instance(this);
-	_parameters_manager->set_interval(interval_from_rate(300.0f));
-	LL_APPEND(_streams, _parameters_manager);
-
-	/* MAVLINK_FTP stream */
-	_mavlink_ftp = (MavlinkFTP *) MavlinkFTP::new_instance(this);
-	_mavlink_ftp->set_interval(interval_from_rate(80.0f));
-	LL_APPEND(_streams, _mavlink_ftp);
-
-	/* MAVLINK_Log_Handler */
-	_mavlink_log_handler = (MavlinkLogHandler *) MavlinkLogHandler::new_instance(this);
-	_mavlink_log_handler->set_interval(interval_from_rate(80.0f));
-	LL_APPEND(_streams, _mavlink_log_handler);
-
-	/* MISSION_STREAM stream, actually sends all MISSION_XXX messages at some rate depending on
-	 * remote requests rate. Rate specified here controls how much bandwidth we will reserve for
-	 * mission messages. */
-	_mission_manager = (MavlinkMissionManager *) MavlinkMissionManager::new_instance(this);
-	_mission_manager->set_interval(interval_from_rate(10.0f));
-	_mission_manager->set_verbose(_verbose);
-	LL_APPEND(_streams, _mission_manager);
-
 	switch (_mode) {
 	case MAVLINK_MODE_NORMAL:
 		configure_stream("SYS_STATUS", 1.0f);
@@ -2042,6 +2041,7 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("CAMERA_CAPTURE", 2.0f);
 		//camera trigger is rate limited at the source, do not limit here
 		configure_stream("CAMERA_TRIGGER", 500.0f);
+		configure_stream("CAMERA_IMAGE_CAPTURED", 5.0f);
 		configure_stream("ACTUATOR_CONTROL_TARGET0", 10.0f);
 		break;
 
@@ -2094,7 +2094,7 @@ Mavlink::task_main(int argc, char *argv[])
 		configure_stream("VFR_HUD", 20.0f);
 		configure_stream("WIND_COV", 10.0f);
 		configure_stream("CAMERA_TRIGGER", 500.0f);
-		configure_stream("MISSION_ITEM", 50.0f);
+		configure_stream("CAMERA_IMAGE_CAPTURED", 5.0f);
 		configure_stream("ACTUATOR_CONTROL_TARGET0", 30.0f);
 		configure_stream("MANUAL_CONTROL", 5.0f);
 		break;
@@ -2142,8 +2142,6 @@ Mavlink::task_main(int argc, char *argv[])
 		hrt_abstime t = hrt_absolute_time();
 
 		update_rate_mult();
-
-		_mission_manager->check_active_mission();
 
 		if (param_sub->update(&param_time, nullptr)) {
 			/* parameters updated */

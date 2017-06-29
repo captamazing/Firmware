@@ -73,6 +73,7 @@ bool
 MissionBlock::is_mission_item_reached()
 {
 	/* handle non-navigation or indefinite waypoints */
+
 	switch (_mission_item.nav_cmd) {
 	case NAV_CMD_DO_SET_SERVO:
 		return true;
@@ -86,6 +87,7 @@ MissionBlock::is_mission_item_reached()
 		return false;
 
 	case NAV_CMD_DO_LAND_START:
+	case NAV_CMD_DO_TRIGGER_CONTROL:
 	case NAV_CMD_DO_DIGICAM_CONTROL:
 	case NAV_CMD_IMAGE_START_CAPTURE:
 	case NAV_CMD_IMAGE_STOP_CAPTURE:
@@ -96,6 +98,8 @@ MissionBlock::is_mission_item_reached()
 	case NAV_CMD_DO_SET_ROI:
 	case NAV_CMD_ROI:
 	case NAV_CMD_DO_SET_CAM_TRIGG_DIST:
+	case NAV_CMD_DO_SET_CAM_TRIGG_INTERVAL:
+	case NAV_CMD_SET_CAMERA_MODE:
 		return true;
 
 	case NAV_CMD_DO_VTOL_TRANSITION:
@@ -234,7 +238,6 @@ MissionBlock::is_mission_item_reached()
 
 			if (fabsf(curr_sp->alt - altitude_amsl) >= FLT_EPSILON) {
 				// check if the initial loiter has been accepted
-				dist = -1.0f;
 				dist_xy = -1.0f;
 				dist_z = -1.0f;
 
@@ -445,6 +448,7 @@ MissionBlock::mission_item_to_vehicle_command(const struct mission_item_s *item,
 void
 MissionBlock::issue_command(const struct mission_item_s *item)
 {
+
 	if (item_contains_position(item)) {
 		return;
 	}
@@ -483,7 +487,7 @@ MissionBlock::issue_command(const struct mission_item_s *item)
 float
 MissionBlock::get_time_inside(const struct mission_item_s &item)
 {
-	if (item.nav_cmd == NAV_CMD_TAKEOFF) {
+	if (item.nav_cmd != NAV_CMD_TAKEOFF) {
 		return item.time_inside;
 	}
 
@@ -493,20 +497,14 @@ MissionBlock::get_time_inside(const struct mission_item_s &item)
 bool
 MissionBlock::item_contains_position(const struct mission_item_s *item)
 {
-	if (item->nav_cmd == NAV_CMD_WAYPOINT ||
-	    item->nav_cmd == NAV_CMD_LOITER_UNLIMITED ||
-	    item->nav_cmd == NAV_CMD_LOITER_TIME_LIMIT ||
-	    item->nav_cmd == NAV_CMD_LAND ||
-	    item->nav_cmd == NAV_CMD_TAKEOFF ||
-	    item->nav_cmd == NAV_CMD_LOITER_TO_ALT ||
-	    item->nav_cmd == NAV_CMD_VTOL_TAKEOFF ||
-	    item->nav_cmd == NAV_CMD_VTOL_LAND) {
-
-		return true;
-
-	}
-
-	return false;
+	return item->nav_cmd == NAV_CMD_WAYPOINT ||
+	       item->nav_cmd == NAV_CMD_LOITER_UNLIMITED ||
+	       item->nav_cmd == NAV_CMD_LOITER_TIME_LIMIT ||
+	       item->nav_cmd == NAV_CMD_LAND ||
+	       item->nav_cmd == NAV_CMD_TAKEOFF ||
+	       item->nav_cmd == NAV_CMD_LOITER_TO_ALT ||
+	       item->nav_cmd == NAV_CMD_VTOL_TAKEOFF ||
+	       item->nav_cmd == NAV_CMD_VTOL_LAND;
 }
 
 void
@@ -521,6 +519,7 @@ MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *ite
 	sp->lon = item->lon;
 	sp->alt = item->altitude_is_relative ? item->altitude + _navigator->get_home_position()->alt : item->altitude;
 	sp->yaw = item->yaw;
+	sp->yaw_valid = PX4_ISFINITE(item->yaw);
 	sp->loiter_radius = (fabsf(item->loiter_radius) > NAV_EPSILON_POSITION) ? fabsf(item->loiter_radius) :
 			    _navigator->get_loiter_radius();
 	sp->loiter_direction = (item->loiter_radius > 0) ? 1 : -1;
@@ -572,9 +571,15 @@ MissionBlock::mission_item_to_position_setpoint(const struct mission_item_s *ite
 		break;
 
 	case NAV_CMD_LOITER_TO_ALT:
+
 		// initially use current altitude, and switch to mission item altitude once in loiter position
-		sp->alt = math::max(_navigator->get_global_position()->alt,
-				    _navigator->get_home_position()->alt + _param_loiter_min_alt.get());
+		if (_param_loiter_min_alt.get() > 0.0f) { // ignore _param_loiter_min_alt if smaller then 0 (-1)
+			sp->alt = math::max(_navigator->get_global_position()->alt,
+					    _navigator->get_home_position()->alt + _param_loiter_min_alt.get());
+
+		} else {
+			sp->alt = _navigator->get_global_position()->alt;
+		}
 
 	// fall through
 	case NAV_CMD_LOITER_TIME_LIMIT:
@@ -686,11 +691,11 @@ MissionBlock::set_takeoff_item(struct mission_item_s *item, float abs_altitude, 
 	/* use current position */
 	item->lat = _navigator->get_global_position()->lat;
 	item->lon = _navigator->get_global_position()->lon;
+	item->yaw = _navigator->get_global_position()->yaw;
 
 	item->altitude = abs_altitude;
 	item->altitude_is_relative = false;
 
-	item->yaw = NAN;
 	item->loiter_radius = _navigator->get_loiter_radius();
 	item->pitch_min = min_pitch;
 	item->autocontinue = false;

@@ -9,6 +9,7 @@ set(config_module_list
 	drivers/gps
 	drivers/pwm_out_sim
 	drivers/vmount
+	drivers/linux_gpio
 	modules/sensors
 	platforms/posix/drivers/accelsim
 	platforms/posix/drivers/adcsim
@@ -47,7 +48,7 @@ set(config_module_list
 	#drivers/test_ppm
 	lib/rc/rc_tests
 	modules/commander/commander_tests
-	modules/controllib_test
+	lib/controllib/controllib_test
 	modules/mavlink/mavlink_tests
 	modules/mc_pos_control/mc_pos_control_tests
 	modules/unit_test
@@ -82,6 +83,8 @@ set(config_module_list
 	#
 	modules/fw_att_control
 	modules/fw_pos_control_l1
+	modules/gnd_att_control
+	modules/gnd_pos_control
 	modules/mc_att_control
 	modules/mc_pos_control
 	modules/vtol_att_control
@@ -96,7 +99,7 @@ set(config_module_list
 	# Library modules
 	#
 	modules/dataman
-	modules/param
+	modules/systemlib/param
 	modules/systemlib
 	modules/systemlib/mixer
 	modules/uORB

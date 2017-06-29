@@ -300,7 +300,7 @@ RTL::set_rtl_item()
 
 	reset_mission_item_reached();
 
-	/* execute command if set */
+	/* execute command if set. This is required for commands like VTOL transition */
 	if (!item_contains_position(&_mission_item)) {
 		issue_command(&_mission_item);
 	}

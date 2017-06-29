@@ -63,18 +63,8 @@ fi
 
 if ver hwcmp AUAV_X21
 then
-	# I2C bus
-	if hmc5883 -C -T start
-	then
-	fi
-
-	# I2C bus
-	if lis3mdl start
-	then
-	fi
-
-	# Internal SPI bus ICM-20602-G is rotated 90 deg yaw
-	if mpu6000 -R 2 -T 20602 start
+	# External I2C bus
+	if hmc5883 -C -T -X start
 	then
 	fi
 
@@ -343,8 +333,14 @@ fi
 
 if ver hwcmp PX4FMU_V4PRO
 then
+
 	# Internal SPI bus ICM-20608-G
 	if mpu6000 -R 2 -T 20608 start
+	then
+	fi
+
+	# Internal SPI bus ICM-20602
+	if mpu6000 -R 2 -T 20602 start
 	then
 	fi
 
@@ -359,7 +355,7 @@ then
 	fi
 
 	# Possible external compasses
-	if hmc5883 -X start
+	if hmc5883 -C -T -X start
 	then
 	fi
 
@@ -367,6 +363,7 @@ fi
 
 if ver hwcmp PX4FMU_V5
 then
+
 	# Internal SPI bus ICM-20602
 	if mpu6000 -R 8 -s -T 20602 start
 	then
@@ -388,7 +385,7 @@ then
 	fi
 
 	# Possible external compasses
-	if hmc5883 -X start
+	if hmc5883 -C -T -X start
 	then
 	fi
 
@@ -396,6 +393,7 @@ then
 	if meas_airspeed start -b 2
 	then
 	fi
+
 fi
 
 if ver hwcmp AEROCORE2
@@ -404,15 +402,14 @@ then
 	lsm303d start
 fi
 
-if meas_airspeed start
+if sdp3x_airspeed start
 then
 else
-	if ets_airspeed start
+	if meas_airspeed start
 	then
 	else
-		if ets_airspeed start -b 1
-		then
-		fi
+		ets_airspeed start
+		ets_airspeed start -b 1
 	fi
 fi
 

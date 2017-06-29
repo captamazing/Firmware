@@ -49,10 +49,10 @@
 //#define MAVLINK_FTP_DEBUG
 
 MavlinkFTP::MavlinkFTP(Mavlink *mavlink) :
-	MavlinkStream(mavlink),
 	_session_info{},
 	_utRcvMsgFunc{},
-	_worker_data{}
+	_worker_data{},
+	_mavlink(mavlink)
 {
 	// initialize session
 	_session_info.fd = -1;
@@ -61,18 +61,6 @@ MavlinkFTP::MavlinkFTP(Mavlink *mavlink) :
 MavlinkFTP::~MavlinkFTP()
 {
 
-}
-
-const char *
-MavlinkFTP::get_name() const
-{
-	return "MAVLINK_FTP";
-}
-
-uint16_t
-MavlinkFTP::get_id()
-{
-	return MAVLINK_MSG_ID_FILE_TRANSFER_PROTOCOL;
 }
 
 unsigned
@@ -84,12 +72,6 @@ MavlinkFTP::get_size()
 	} else {
 		return 0;
 	}
-}
-
-MavlinkStream *
-MavlinkFTP::new_instance(Mavlink *mavlink)
-{
-	return new MavlinkFTP(mavlink);
 }
 
 #ifdef MAVLINK_FTP_UNIT_TEST
@@ -373,20 +355,27 @@ MavlinkFTP::_workList(PayloadHeader *payload, bool list_hidden)
 		switch (result->d_type) {
 #ifdef __PX4_NUTTX
 
-		case DTYPE_FILE:
+		case DTYPE_FILE: {
 #else
-		case DT_REG:
-#endif
-			// For files we get the file size as well
-			direntType = kDirentFile;
-			snprintf(buf, sizeof(buf), "%s/%s", dirPath, result->d_name);
-			struct stat st;
 
-			if (stat(buf, &st) == 0) {
-				fileSize = st.st_size;
+		case DT_REG: {
+#endif
+				// For files we get the file size as well
+				direntType = kDirentFile;
+				int ret = snprintf(buf, sizeof(buf), "%s/%s", dirPath, result->d_name);
+				bool buf_is_ok = ((ret > 0) && (ret < sizeof(buf)));
+
+				if (buf_is_ok) {
+					struct stat st;
+
+					if (stat(buf, &st) == 0) {
+						fileSize = st.st_size;
+					}
+				}
+
+				break;
 			}
 
-			break;
 #ifdef __PX4_NUTTX
 
 		case DTYPE_DIRECTORY:
@@ -415,7 +404,12 @@ MavlinkFTP::_workList(PayloadHeader *payload, bool list_hidden)
 
 		} else if (direntType == kDirentFile) {
 			// Files send filename and file length
-			snprintf(buf, sizeof(buf), "%s\t%d", result->d_name, fileSize);
+			int ret = snprintf(buf, sizeof(buf), "%s\t%d", result->d_name, fileSize);
+			bool buf_is_ok = ((ret > 0) && (ret < sizeof(buf)));
+
+			if (!buf_is_ok) {
+				buf[sizeof(buf) - 1] = '\0';
+			}
 
 		} else {
 			// Everything else just sends name
@@ -1013,4 +1007,3 @@ void MavlinkFTP::send(const hrt_abstime t)
 		_reply(&ftp_msg);
 	} while (more_data);
 }
-
