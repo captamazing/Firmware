@@ -45,7 +45,7 @@ param set MPC_XY_VEL_MAX 0.6
 # GPS only mode
 # param set LPE_FUSION 145
 # Use vision - no GPS
-param set LPE_FUSION 246
+param set LPE_FUSION 12
 param set ATT_EXT_HDG_M 1
 param set LPE_VIS_Z 0.1
 #param set EKF2_AID_MASK 24
