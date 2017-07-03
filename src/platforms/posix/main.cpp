@@ -613,6 +613,13 @@ int main(int argc, char **argv)
 		run_cmd(muorb_stop_cmd, !daemon_mode, true);
 	}
 
+	if (true) {
+		//if (px4_task_is_running("muorb")) {
+		// sending sonar stop command to make sure we un-export the relevant GPIO pins
+		vector<string> sonar_stop_cmd = { "ursa_sonar", "stop" };
+		run_cmd(sonar_stop_cmd, !daemon_mode, true);
+	}
+
 	DriverFramework::Framework::shutdown();
 	vector<string> shutdown_cmd = { "shutdown" };
 	run_cmd(shutdown_cmd, true);

@@ -42,6 +42,8 @@ using namespace DriverFramework;
 
 #define MAX_STR 35
 #define URSA_SONAR_PULSE_INTERVAL_US 100000
+#define MAX_SONAR_RANGE 4
+#define MIN_SONAR_RANGE 0.02
 
 class UrsaSonarPub
 {
@@ -74,19 +76,19 @@ private:
     void *_gpio_map;
     int _publish();
     void _cycle();
-    struct distance_sensor_s _rcdata;
-    uint8_t  _num_channels;
-    int _channel_counter;
-    orb_advert_t _rc_topic;
+    struct distance_sensor_s _sonar_data;
+    orb_advert_t _sonar_topic;
     int _gpio_Out;
     int _gpio_In;
     bool _shouldExit;
     struct work_s _work;
+    double _range;
 };
 
 UrsaSonarPub::UrsaSonarPub() :
-    _channel_counter(0),
-    _rc_topic(nullptr)
+    _sonar_topic(nullptr),
+    _shouldExit(false),
+    _range(0.0f)
 {
 }
 
@@ -98,7 +100,11 @@ int UrsaSonarPub::init(int gpio_Out, int gpio_In)
 {
     _gpio_In=gpio_In;
     _gpio_Out=gpio_Out;
-    _shouldExit=false;
+    _sonar_data.min_distance = MIN_SONAR_RANGE;
+    _sonar_data.max_distance = MAX_SONAR_RANGE;
+    _sonar_data.type = distance_sensor_s::MAV_DISTANCE_SENSOR_ULTRASOUND;
+    _sonar_data.id = 0;
+    //_sonardata.orientation=MAV_SENSOR_ROTATION_NONE;
 
     // Get a handle to our timed GPIO DMA magic
     DevHandle h;
@@ -205,65 +211,27 @@ int UrsaSonarPub::stop()
 
 void UrsaSonarPub::process_pulse(uint32_t width_usec){
     double range = width_usec/5882.35;
-    PX4_INFO("RANGE: %f", range);
-    // if (width_usec >= 2700) {
-    //     // a long pulse indicates the end of a frame. Reset the
-    //     // channel counter so next pulse is channel 0 and publish to uORB
-    //     if (_channel_counter >= 0) {
-    //         _rcdata.channel_count = _channel_counter;
-    //         _publish();
-    //     }
-    //     _channel_counter = 0;
-    //     return;
-    // }
-    // if (_channel_counter == -1) {
-    //     // we are not synchronised
-    //     return;
-    // }
 
-    
-    //   we limit inputs to between 700usec and 2300usec. This allows us
-    //   to decode SBUS on the same pin, as SBUS will have a maximum
-    //   pulse width of 100usec
-     
-    // if (width_usec > 700 && width_usec < 2300) {
-    //     // take a reading for the current channel
-    //     // buffer these
-    //     _rcdata.values[_channel_counter] = width_usec;
-
-    //     // move to next channel
-    //     _channel_counter++;
-    // }
-
-    // // if we have reached the maximum supported channels then
-    // // mark as unsynchronised, so we wait for a wide pulse
-    // if (_channel_counter >= LINUX_RC_INPUT_NUM_CHANNELS) {
-    //     _rcdata.channel_count = _channel_counter;
-    //     _channel_counter = -1;
-    // }
+    if (range>MIN_SONAR_RANGE && range<MAX_SONAR_RANGE){
+        _range=range;
+        _publish();
+    }
 
     return;
 }
 
 int UrsaSonarPub::_publish(){
+    uint64_t ts = hrt_absolute_time();
+    _sonar_data.timestamp = ts;
+    _sonar_data.current_distance=_range;
+    _sonar_data.covariance=0.0f;
 
-    // uint64_t ts = hrt_absolute_time();
-    // _rcdata.timestamp = ts;
-    // _rcdata.timestamp_last_signal = ts;
-    // _rcdata.rssi = 100;
-    // _rcdata.rc_lost_frame_count = 0;
-    // _rcdata.rc_total_frame_count = 1;
-    // _rcdata.rc_ppm_frame_length = 100;
-    // _rcdata.rc_failsafe = false;
-    // _rcdata.rc_lost = false;
-    // _rcdata.input_source = input_rc_s::RC_INPUT_SOURCE_PX4IO_PPM;
+    if (_sonar_topic == nullptr) {
+        _sonar_topic = orb_advertise(ORB_ID(distance_sensor), &_sonar_data);
 
-    // if (_rc_topic == nullptr) {
-    //     _rc_topic = orb_advertise(ORB_ID(input_rc), &_rcdata);
-
-    // } else {
-    //     orb_publish(ORB_ID(input_rc), _rc_topic, &_rcdata);
-    // }
+    } else {
+        orb_publish(ORB_ID(distance_sensor), _sonar_topic, &_sonar_data);
+    }
     return 0;
 }
 
