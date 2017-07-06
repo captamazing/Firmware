@@ -125,7 +125,6 @@ set(config_df_driver_list
 	trone
 	isl29501
 	ads1115
-	#ursa_rcin
 	ursa_gpio
 	pca9685
 	common
