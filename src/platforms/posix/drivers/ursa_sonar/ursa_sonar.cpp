@@ -274,7 +274,7 @@ int start(int gpio_Out, int gpio_In)
 int stop()
 {
     if (g_dev == nullptr) {
-        PX4_ERR("UrsaSonarPub tried to stop but not running");
+        PX4_INFO("UrsaSonarPub tried to stop but not running");
         return 1;
     }
 
@@ -307,7 +307,7 @@ int info()
 
 void usage()
 {
-    PX4_WARN("Usage: ursa_sonar 'start [gpio in] [gpio out]', 'info', 'stop'");
+    PX4_WARN("Usage: ursa_sonar 'start [gpio out] [gpio in]', 'info', 'stop'");
 }
 
 } // namespace ursa_sonar

@@ -103,6 +103,8 @@ int DfGPIOWrapper::start()
 
 	DevMgr::releaseHandle(h);
 
+	PX4_INFO("Successfully started PIGPIO library");
+
 	return 0;
 }
 
@@ -115,7 +117,7 @@ int DfGPIOWrapper::stop()
 		return ret;
 	}
 
-	PX4_INFO("Stopping GPIO Wrapper...");
+	PX4_INFO("Stopping GPIO Wrapper and terminating PIGPIO library...");
 
 	return 0;
 }
