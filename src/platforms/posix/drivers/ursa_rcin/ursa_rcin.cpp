@@ -64,19 +64,22 @@ public:
      */
     int stop();
 
-    void process_rc_pulse(uint32_t width_usec);
-    gpio_callback_t callbackStruct;
+    void rc_level_change(int gpio, int val, uint32_t tick);
+    gpio_write_t callbackStruct;
 
 private:
     int _publish();
+    void _process_rc_pulse(uint32_t width_usec);
     struct input_rc_s _rcdata;
     uint8_t  _num_channels;
     int _channel_counter;
+    uint32_t _startframe;
     orb_advert_t _rc_topic;
 };
 
 UrsaRCINPub::UrsaRCINPub() :
     _channel_counter(0),
+    _startframe(0),
     _rc_topic(nullptr)
 {
 }
@@ -97,10 +100,10 @@ int UrsaRCINPub::init(int gpio)
     }
 
     // Setup the callback struct which we'll pass to the timed GPIO device
-    callbackStruct.callback=std::bind(&UrsaRCINPub::process_rc_pulse, this, std::placeholders::_1);
-    callbackStruct.pin=gpio;
-    callbackStruct.type=GPIO_CALLBACK_TOTALTIME;
-    h.write((void*)&callbackStruct,sizeof(gpio_callback_t));
+    callbackStruct.callback=std::bind(&UrsaRCINPub::rc_level_change, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    callbackStruct.value=gpio;
+    callbackStruct.type=GPIO_CALLBACK;
+    h.write((void*)&callbackStruct,sizeof(gpio_write_t));
 
     // Don't need this handle anymore
     DevMgr::releaseHandle(h);
@@ -118,7 +121,16 @@ int UrsaRCINPub::stop()
     return 0;
 }
 
-void UrsaRCINPub::process_rc_pulse(uint32_t width_usec){
+void UrsaRCINPub::rc_level_change(int gpio, int val, uint32_t tick){
+    if (val==1){
+        uint32_t time=tick-_startframe;
+        _process_rc_pulse(time);
+        _startframe=tick;
+        return;
+    }
+}
+
+void UrsaRCINPub::_process_rc_pulse(uint32_t width_usec){
     if (width_usec >= 2700) {
         // a long pulse indicates the end of a frame. Reset the
         // channel counter so next pulse is channel 0 and publish to uORB

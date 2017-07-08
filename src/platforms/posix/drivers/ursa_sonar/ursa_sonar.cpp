@@ -66,13 +66,14 @@ public:
      */
     int stop();
 
-    void process_pulse(uint32_t width_usec);
-    gpio_callback_t callbackStruct;
+    void process_pulse(int gpio, int val, uint32_t tick);
+    gpio_write_t callbackStruct;
 
     /* Trampoline for the work queue. */
     static void cycle_trampoline(void *arg);
 
 private:
+    uint32_t _startpulse;
     void *_gpio_map;
     int _publish();
     void _cycle();
@@ -86,6 +87,7 @@ private:
 };
 
 UrsaSonarPub::UrsaSonarPub() :
+    _startpulse(0),
     _sonar_topic(nullptr),
     _shouldExit(false),
     _range(0.0f)
@@ -106,7 +108,7 @@ int UrsaSonarPub::init(int gpio_Out, int gpio_In)
     _sonar_data.id = 0;
     //_sonardata.orientation=MAV_SENSOR_ROTATION_NONE;
 
-    // Get a handle to our timed GPIO DMA magic
+    //Get a handle to our timed GPIO DMA magic
     DevHandle h;
     DevMgr::getHandle(GPIO_DEV_PATH, h); 
 
@@ -116,15 +118,15 @@ int UrsaSonarPub::init(int gpio_Out, int gpio_In)
     }
 
     // Setup the callback struct which we'll pass to the timed GPIO device
-    callbackStruct.callback=std::bind(&UrsaSonarPub::process_pulse, this, std::placeholders::_1);
-    callbackStruct.pin=gpio_In;
-    callbackStruct.type=GPIO_CALLBACK_HIGHTIME;
-    h.write((void*)&callbackStruct,sizeof(gpio_callback_t));
+    callbackStruct.callback=std::bind(&UrsaSonarPub::process_pulse, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+    callbackStruct.value=gpio_In;
+    callbackStruct.type=GPIO_CALLBACK;
+    h.write((void*)&callbackStruct,sizeof(gpio_write_t));
 
     // Don't need this handle anymore
     DevMgr::releaseHandle(h);
 
-    // Export our GPIO output pin and get it ready for writing via the filesystem - also set input pin mode
+    //Export our GPIO output pin and get it ready for writing via the filesystem - also set input pin mode
     int gpio_fd;
     char buf[3];
 
@@ -209,14 +211,17 @@ int UrsaSonarPub::stop()
     return 0;
 }
 
-void UrsaSonarPub::process_pulse(uint32_t width_usec){
-    double range = width_usec/5882.35;
-
+void UrsaSonarPub::process_pulse(int gpio, int val, uint32_t tick){
+    if (val==1){
+        _startpulse=tick;
+        return;
+    }
+    uint32_t time = tick-_startpulse;
+    double range = time/5882.35;
     if (range>MIN_SONAR_RANGE && range<MAX_SONAR_RANGE){
         _range=range;
         _publish();
     }
-
     return;
 }
 
