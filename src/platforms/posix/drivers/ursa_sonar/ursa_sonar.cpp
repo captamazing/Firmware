@@ -6,7 +6,7 @@
 
 /**
  * @file ursa_sonar.cpp
- * Lightweight driver to read sonar measurements via DMA timed GPIO and FS writes
+ * Lightweight driver to read sonar measurements via DMA timed GPIO
  */
 
 #include <px4_config.h>
@@ -68,11 +68,13 @@ public:
 
     void process_pulse(int gpio, int val, uint32_t tick);
     gpio_write_t callbackStruct;
+    gpio_write_t pulseStruct;
 
     /* Trampoline for the work queue. */
     static void cycle_trampoline(void *arg);
 
 private:
+    DevHandle _gpio_handle;
     uint32_t _startpulse;
     void *_gpio_map;
     int _publish();
@@ -109,54 +111,24 @@ int UrsaSonarPub::init(int gpio_Out, int gpio_In)
     //_sonardata.orientation=MAV_SENSOR_ROTATION_NONE;
 
     //Get a handle to our timed GPIO DMA magic
-    DevHandle h;
-    DevMgr::getHandle(GPIO_DEV_PATH, h); 
+    DevMgr::getHandle(GPIO_DEV_PATH, _gpio_handle); 
 
-    if (!h.isValid()) {
+    if (!_gpio_handle.isValid()) {
         PX4_ERR("Failed to get handle to timed GPIO device");
         return -1;
     }
 
     // Setup the callback struct which we'll pass to the timed GPIO device
     callbackStruct.callback=std::bind(&UrsaSonarPub::process_pulse, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-    callbackStruct.value=gpio_In;
+    callbackStruct.gpio=gpio_In;
     callbackStruct.type=GPIO_CALLBACK;
-    h.write((void*)&callbackStruct,sizeof(gpio_write_t));
+    _gpio_handle.write((void*)&callbackStruct,sizeof(gpio_write_t));
 
-    // Don't need this handle anymore
-    DevMgr::releaseHandle(h);
-
-    //Export our GPIO output pin and get it ready for writing via the filesystem - also set input pin mode
-    int gpio_fd;
-    char buf[3];
-
-    //Export pins
-    if ((gpio_fd = open("/sys/class/gpio/export", O_RDWR | O_SYNC)) < 0) {
-        PX4_ERR("Failed to open pin export file descriptor");
-        return -1;
-    }
-    snprintf(buf, 3*sizeof(char), "%d", gpio_Out);
-    write(gpio_fd, buf, 3);
-    close(gpio_fd);
-
-    // Direction is output
-    char str_dir_file[MAX_STR];
-    snprintf(str_dir_file, MAX_STR*sizeof(char), "/sys/class/gpio/gpio%d/direction", gpio_Out);
-    if ((gpio_fd = open(str_dir_file, O_RDWR | O_SYNC)) < 0) {
-        PX4_ERR("Failed to open pin direction file descriptor");
-        return -1;
-    }
-    write(gpio_fd, "out", 4);
-    close(gpio_fd);
-
-    //Un-export input pin - just to be safe!
-    if ((gpio_fd = open("/sys/class/gpio/unexport", O_RDWR | O_SYNC)) < 0) {
-        PX4_ERR("Failed to open pin unexport file descriptor");
-        return -1;
-    }
-    snprintf(buf, 3*sizeof(char), "%d", gpio_In);
-    write(gpio_fd, buf, 3);
-    close(gpio_fd);
+    // Setup GPIO write struct on output and write low
+    pulseStruct.gpio=gpio_Out;
+    pulseStruct.type=GPIO_WRITE;
+    pulseStruct.value=0;
+    _gpio_handle.write((void*)&pulseStruct,sizeof(gpio_write_t));
 
     _cycle();
 
@@ -172,15 +144,11 @@ void UrsaSonarPub::cycle_trampoline(void *arg)
 void UrsaSonarPub::_cycle()
 {
     // Send out a pulse on the GPIO
-    int gpio_fd;
-    char str_val_file[MAX_STR];
-    snprintf(str_val_file, MAX_STR*sizeof(char), "/sys/class/gpio/gpio%d/value", _gpio_Out);
-    if ((gpio_fd = open(str_val_file, O_RDWR | O_SYNC)) < 0) {
-        PX4_ERR("Failed to open pin value file descriptor");
-    }
-    write(gpio_fd, "1", 2);
-    write(gpio_fd, "0", 2);
-    close(gpio_fd);
+    pulseStruct.value=1;
+    _gpio_handle.write((void*)&pulseStruct,sizeof(gpio_write_t));
+    usleep(10);
+    pulseStruct.value=0;
+    _gpio_handle.write((void*)&pulseStruct,sizeof(gpio_write_t));
 
     if (!_shouldExit) {
         work_queue(HPWORK, &_work, (worker_t)&UrsaSonarPub::cycle_trampoline, this,

@@ -101,7 +101,7 @@ int UrsaRCINPub::init(int gpio)
 
     // Setup the callback struct which we'll pass to the timed GPIO device
     callbackStruct.callback=std::bind(&UrsaRCINPub::rc_level_change, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
-    callbackStruct.value=gpio;
+    callbackStruct.gpio=gpio;
     callbackStruct.type=GPIO_CALLBACK;
     h.write((void*)&callbackStruct,sizeof(gpio_write_t));
 
