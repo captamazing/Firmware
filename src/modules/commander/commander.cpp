@@ -495,6 +495,8 @@ int commander_main(int argc, char *argv[])
 				cmd.param6 = NAN;
 				cmd.param7 = NAN;
 
+				cmd.timestamp = hrt_absolute_time();
+
 				orb_advert_t h = orb_advertise_queue(ORB_ID(vehicle_command), &cmd, vehicle_command_s::ORB_QUEUE_LENGTH);
 				(void)orb_unadvertise(h);
 
@@ -1160,7 +1162,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 		if (_mission_result.valid) {
 
 			// requested first mission item valid
-			if (PX4_ISFINITE(cmd->param1) && (cmd->param1 >= 0) && (cmd->param1 < _mission_result.seq_total)) {
+			if (PX4_ISFINITE(cmd->param1) && (cmd->param1 >= -1) && (cmd->param1 < _mission_result.seq_total)) {
 
 				// switch to AUTO_MISSION and ARM
 				if ((TRANSITION_DENIED != main_state_transition(status_local, commander_state_s::MAIN_STATE_AUTO_MISSION, main_state_prev, &status_flags, &internal_state))
@@ -1684,6 +1686,8 @@ int commander_thread_main(int argc, char *argv[])
 		checkAirspeed = true;
 	}
 
+	commander_boot_timestamp = hrt_absolute_time();
+
 	// Run preflight check
 	int32_t rc_in_off = 0;
 	bool hotplug_timeout = hrt_elapsed_time(&commander_boot_timestamp) > HOTPLUG_SENS_TIMEOUT;
@@ -1719,8 +1723,6 @@ int commander_thread_main(int argc, char *argv[])
 	int32_t rc_arm_hyst = 100;
 	param_get(_param_rc_arm_hyst, &rc_arm_hyst);
 	rc_arm_hyst *= COMMANDER_MONITORING_LOOPSPERMSEC;
-
-	commander_boot_timestamp = hrt_absolute_time();
 
 	transition_result_t arming_ret;
 

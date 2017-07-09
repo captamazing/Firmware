@@ -1,6 +1,7 @@
+#!/usr/bin/env python
 ############################################################################
 #
-#   Copyright (c) 2015 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2017 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -30,14 +31,38 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-px4_add_module(
-	MODULE drivers__meas_airspeed
-	MAIN meas_airspeed
-	STACK_MAIN 1200
-	COMPILE_FLAGS
-	SRCS
-		meas_airspeed.cpp
-	DEPENDS
-		platforms__common
-	)
-# vim: set noet ft=cmake fenc=utf-8 ff=unix :
+
+#
+# Basic central executable for PX4 maintenance
+#
+
+# for python2.7 compatibility
+from __future__ import print_function
+
+import sys
+import argparse
+import binascii
+import serial
+import socket
+import struct
+import json
+import zlib
+import base64
+import time
+import array
+import os
+
+from sys import platform as _platform
+
+# Detect python version
+if sys.version_info[0] < 3:
+    runningPython3 = False
+else:
+    runningPython3 = True
+
+def main():
+
+    print("PX4 release v1.6")
+
+if __name__ == '__main__':
+    main()

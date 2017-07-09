@@ -43,7 +43,6 @@
  * Supported sensors:
  *
  *    - MS4525DO (http://www.meas-spec.com/downloads/MS4525DO.pdf)
- *    - untested: MS5525DSO (http://www.meas-spec.com/downloads/MS5525DSO.pdf)
  *
  * Interface application notes:
  *
@@ -94,9 +93,6 @@
 /* I2C bus address is 1010001x */
 #define I2C_ADDRESS_MS4525DO	0x28	/**< 7-bit address. Depends on the order code (this is for code "I") */
 #define PATH_MS4525		"/dev/ms4525"
-/* The MS5525DSO address is 111011Cx, where C is the complementary value of the pin CSB */
-#define I2C_ADDRESS_MS5525DSO	0x77	//0x77/* 7-bit address, addr. pin pulled low */
-#define PATH_MS5525		"/dev/ms5525"
 
 /* Register address */
 #define ADDR_READ_MR			0x00	/* write to this address to start conversion */
@@ -135,7 +131,7 @@ protected:
 /*
  * Driver 'main' command.
  */
-extern "C" __EXPORT int meas_airspeed_main(int argc, char *argv[]);
+extern "C" __EXPORT int ms4525_airspeed_main(int argc, char *argv[]);
 
 MEASAirspeed::MEASAirspeed(int bus, int address, const char *path) : Airspeed(bus, address,
 			CONVERSION_INTERVAL, path),
@@ -238,9 +234,6 @@ MEASAirspeed::collect()
 	// correct for 5V rail voltage if possible
 	voltage_correction(diff_press_pa_raw, temperature);
 
-	// the raw value still should be compensated for the known offset
-	diff_press_pa_raw -= _diff_pres_offset;
-
 	/*
 	  With the above calculation the MS4525 sensor will produce a
 	  positive number when the top port is used as a dynamic port
@@ -249,18 +242,11 @@ MEASAirspeed::collect()
 
 	struct differential_pressure_s report;
 
-	/* track maximum differential pressure measured (so we can work out top speed). */
-	if (diff_press_pa_raw > _max_differential_pressure_pa) {
-		_max_differential_pressure_pa = diff_press_pa_raw;
-	}
-
 	report.timestamp = hrt_absolute_time();
 	report.error_count = perf_event_count(_comms_errors);
 	report.temperature = temperature;
-	report.differential_pressure_filtered_pa =  _filter.apply(diff_press_pa_raw);
-
-	report.differential_pressure_raw_pa = diff_press_pa_raw;
-	report.max_differential_pressure_pa = _max_differential_pressure_pa;
+	report.differential_pressure_filtered_pa =  _filter.apply(diff_press_pa_raw) - _diff_pres_offset;
+	report.differential_pressure_raw_pa = diff_press_pa_raw - _diff_pres_offset;
 
 	if (_airspeed_pub != nullptr && !(_pub_blocked)) {
 		/* publish it */
@@ -440,20 +426,10 @@ start(int i2c_bus)
 		goto fail;
 	}
 
-	/* try the MS5525DSO next if init fails */
+	/* both versions failed if the init for the MS5525DSO fails, give up */
 	if (OK != g_dev->Airspeed::init()) {
-		delete g_dev;
-		g_dev = new MEASAirspeed(i2c_bus, I2C_ADDRESS_MS5525DSO, PATH_MS5525);
-
-		/* check if the MS5525DSO was instantiated */
-		if (g_dev == nullptr) {
-			goto fail;
-		}
-
-		/* both versions failed if the init for the MS5525DSO fails, give up */
-		if (OK != g_dev->Airspeed::init()) {
-			goto fail;
-		}
+		PX4_WARN("init fail");
+		goto fail;
 	}
 
 	/* set the poll rate to default, starts automatic data collection */
@@ -476,7 +452,8 @@ fail:
 		g_dev = nullptr;
 	}
 
-	errx(1, "no MS4525 airspeed sensor connected");
+	PX4_WARN("no MS4525 airspeed sensor connected");
+	exit(1);
 }
 
 /**
@@ -615,7 +592,7 @@ meas_airspeed_usage()
 }
 
 int
-meas_airspeed_main(int argc, char *argv[])
+ms4525_airspeed_main(int argc, char *argv[])
 {
 	int i2c_bus = PX4_I2C_BUS_DEFAULT;
 

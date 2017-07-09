@@ -286,14 +286,13 @@ Navigator::task_main()
 			/* timed out - periodic check for _task_should_exit, etc. */
 			if (global_pos_available_once) {
 				global_pos_available_once = false;
-				PX4_WARN("global position timeout");
 			}
 
 			/* Let the loop run anyway, don't do `continue` here. */
 
 		} else if (pret < 0) {
 			/* this is undesirable but not much we can do - might want to flag unhappy status */
-			PX4_ERR("nav: poll error %d, %d", pret, errno);
+			PX4_ERR("poll error %d, %d", pret, errno);
 			usleep(10000);
 			continue;
 
@@ -475,6 +474,7 @@ Navigator::task_main()
 					vcmd.param1 = land_start;
 					vcmd.param2 = 0;
 
+					vcmd.timestamp = hrt_absolute_time();
 					publish_vehicle_cmd(vcmd);
 
 				} else {

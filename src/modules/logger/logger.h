@@ -58,6 +58,13 @@ namespace px4
 namespace logger
 {
 
+enum class SDLogProfile : int32_t {
+	DEFAULT = 0,
+	THERMAL_CALIBRATION,
+	SYSTEM_IDENTIFICATION,
+	N_PROFILES
+};
+
 struct LoggerSubscription {
 	int fd[ORB_MULTI_MAX_INSTANCES];
 	uint16_t msg_ids[ORB_MULTI_MAX_INSTANCES];
@@ -210,6 +217,7 @@ private:
 	void write_version();
 
 	void write_info(const char *name, const char *value);
+	void write_info_multiple(const char *name, const char *value, bool is_continued);
 	void write_info(const char *name, int32_t value);
 	void write_info(const char *name, uint32_t value);
 
@@ -245,8 +253,10 @@ private:
 	 */
 	int add_topics_from_file(const char *fname);
 
-	void add_default_topics();
-	void add_calibration_topics();
+	void add_common_topics();
+	void add_estimator_replay_topics();
+	void add_thermal_calibration_topics();
+	void add_system_identification_topics();
 
 	void ack_vehicle_command(orb_advert_t &vehicle_command_ack_pub, uint16_t command, uint32_t result);
 
@@ -305,9 +315,7 @@ private:
 	hrt_abstime					_next_load_print = 0; ///< timestamp when to print the process load
 
 	// control
-	param_t _sdlog_mode_handle;
-	int32_t _sdlog_mode;
-
+	param_t _sdlog_profile_handle;
 };
 
 } //namespace logger

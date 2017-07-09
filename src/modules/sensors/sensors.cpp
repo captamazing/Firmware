@@ -395,7 +395,6 @@ Sensors::diff_pres_poll(struct sensor_combined_s &raw)
 						   _voted_sensors_update.baro_pressure(), air_temperature_celsius));
 
 		_airspeed.air_temperature_celsius = air_temperature_celsius;
-		_airspeed.differential_pressure_filtered_pa = _diff_pres.differential_pressure_filtered_pa;
 
 		int instance;
 		orb_publish_auto(ORB_ID(airspeed), &_airspeed_pub, &_airspeed, &instance, ORB_PRIO_DEFAULT);
@@ -489,7 +488,7 @@ Sensors::adc_poll(struct sensor_combined_s &raw)
 					}
 
 				} else if (ADC_BATTERY_CURRENT_CHANNEL == buf_adc[i].am_channel) {
-					bat_current_a = ((buf_adc[i].am_data * _parameters.battery_current_scaling)
+					bat_current_a = (((float)(buf_adc[i].am_data) * _parameters.battery_current_scaling)
 							 - _parameters.battery_current_offset) * _parameters.battery_a_per_v;
 
 #ifdef ADC_AIRSPEED_VOLTAGE_CHANNEL

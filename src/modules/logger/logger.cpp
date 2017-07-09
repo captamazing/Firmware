@@ -396,12 +396,11 @@ Logger::Logger(LogWriter::Backend backend, size_t buffer_size, uint32_t log_inte
 	_log_until_shutdown(log_until_shutdown),
 	_log_name_timestamp(log_name_timestamp),
 	_writer(backend, buffer_size, queue_size),
-	_log_interval(log_interval),
-	_sdlog_mode(0)
+	_log_interval(log_interval)
 {
 	_log_utc_offset = param_find("SDLOG_UTC_OFFSET");
 	_log_dirs_max = param_find("SDLOG_DIRS_MAX");
-	_sdlog_mode_handle = param_find("SDLOG_MODE");
+	_sdlog_profile_handle = param_find("SDLOG_PROFILE");
 
 	if (poll_topic_name) {
 		const orb_metadata **topics = orb_get_topics();
@@ -494,17 +493,30 @@ int Logger::add_topic(const char *name, unsigned interval = 0)
 
 	for (size_t i = 0; i < orb_topics_count(); i++) {
 		if (strcmp(name, topics[i]->o_name) == 0) {
-			fd = add_topic(topics[i]);
-			PX4_DEBUG("logging topic: %s, interval: %i", topics[i]->o_name, interval);
-			break;
+			bool already_added = false;
+
+			// check if already added: if so, only update the interval
+			for (size_t j = 0; j < _subscriptions.size(); ++j) {
+				if (_subscriptions[j].metadata == topics[i]) {
+					PX4_DEBUG("logging topic %s, interval: %i, already added, only setting interval",
+						  topics[i]->o_name, interval);
+					fd = _subscriptions[j].fd[0];
+					already_added = true;
+					break;
+				}
+			}
+
+			if (!already_added) {
+				fd = add_topic(topics[i]);
+				PX4_DEBUG("logging topic: %s, interval: %i", topics[i]->o_name, interval);
+				break;
+			}
 		}
 	}
 
 	// if we poll on a topic, we don't set the interval and let the polled topic define the maximum interval
-	if (!_polling_topic_meta) {
-		if (fd >= 0 && interval != 0) {
-			orb_set_interval(fd, interval);
-		}
+	if (!_polling_topic_meta && fd >= 0) {
+		orb_set_interval(fd, interval);
 	}
 
 	return fd;
@@ -552,7 +564,7 @@ bool Logger::copy_if_updated_multi(LoggerSubscription &sub, int multi_instance, 
 	return updated;
 }
 
-void Logger::add_default_topics()
+void Logger::add_common_topics()
 {
 #ifdef CONFIG_ARCH_BOARD_SITL
 	add_topic("vehicle_attitude_groundtruth", 10);
@@ -561,61 +573,71 @@ void Logger::add_default_topics()
 #endif
 
 	// Note: try to avoid setting the interval where possible, as it increases RAM usage
-
-	add_topic("vehicle_attitude", 30);
-	add_topic("actuator_outputs", 100);
-	add_topic("telemetry_status");
-	add_topic("vehicle_command");
-	add_topic("vtol_vehicle_status", 100);
-	add_topic("commander_state", 100);
-	add_topic("satellite_info");
-	add_topic("vehicle_attitude_setpoint", 30);
-	add_topic("vehicle_rates_setpoint", 30);
 	add_topic("actuator_controls_0", 100);
 	add_topic("actuator_controls_1", 100);
-	add_topic("vehicle_local_position", 100);
-	add_topic("vehicle_local_position_setpoint", 100);
-	add_topic("vehicle_global_position", 200);
-	add_topic("vehicle_vision_position");
-	add_topic("vehicle_vision_attitude");
-	add_topic("battery_status", 300);
-	add_topic("system_power", 300);
-	add_topic("position_setpoint_triplet", 200);
+	add_topic("actuator_outputs", 100);
+	add_topic("airspeed");
 	add_topic("att_pos_mocap", 50);
-	add_topic("optical_flow", 50);
-	add_topic("rc_channels", 100);
-	add_topic("input_rc", 100);
+	add_topic("battery_status", 300);
+	add_topic("camera_capture");
+	add_topic("camera_trigger");
+	add_topic("commander_state", 100);
+	add_topic("control_state", 100);
+	add_topic("cpuload");
 	add_topic("differential_pressure", 50);
+	add_topic("distance_sensor");
+	add_topic("ekf2_innovations", 50);
 	add_topic("esc_status", 250);
 	add_topic("estimator_status", 200); //this one is large
-	add_topic("ekf2_innovations", 50);
-	add_topic("tecs_status", 20);
-	add_topic("wind_estimate", 100);
-	add_topic("control_state", 100);
-	add_topic("camera_trigger");
-	add_topic("camera_capture");
-	add_topic("cpuload");
-	add_topic("gps_dump"); //this will only be published if GPS_DUMP_COMM is set
+	add_topic("gps_dump"); //this will only be published if gps_dump_comm is set
+	add_topic("input_rc", 100);
+	add_topic("optical_flow", 50);
+	add_topic("position_setpoint_triplet", 200);
+	add_topic("rc_channels", 100);
+	add_topic("satellite_info");
+	add_topic("sensor_combined", 100);
 	add_topic("sensor_preflight", 50);
+	add_topic("system_power", 300);
 	add_topic("task_stack_info");
-
-	/* for estimator replay (need to be at full rate) */
-	add_topic("airspeed");
-	add_topic("distance_sensor");
-	add_topic("ekf2_timestamps");
-	add_topic("sensor_combined");
+	add_topic("tecs_status", 20);
+	add_topic("telemetry_status");
+	add_topic("vehicle_attitude", 30);
+	add_topic("vehicle_attitude_setpoint", 30);
+	add_topic("vehicle_command");
+	add_topic("vehicle_global_position", 200);
 	add_topic("vehicle_gps_position");
 	add_topic("vehicle_land_detected");
+	add_topic("vehicle_local_position", 100);
+	add_topic("vehicle_local_position_setpoint", 100);
+	add_topic("vehicle_rates_setpoint", 30);
 	add_topic("vehicle_status");
+	add_topic("vehicle_vision_attitude");
+	add_topic("vehicle_vision_position");
+	add_topic("vtol_vehicle_status", 100);
+	add_topic("wind_estimate", 100);
 }
 
-void Logger::add_calibration_topics()
+void Logger::add_estimator_replay_topics()
+{
+	// for estimator replay (need to be at full rate)
+	add_topic("ekf2_timestamps");
+	add_topic("sensor_combined");
+}
+
+void Logger::add_thermal_calibration_topics()
 {
 	// Note: try to avoid setting the interval where possible, as it increases RAM usage
-
-	add_topic("sensor_gyro", 100);
 	add_topic("sensor_accel", 100);
 	add_topic("sensor_baro", 100);
+	add_topic("sensor_gyro", 100);
+}
+
+void Logger::add_system_identification_topics()
+{
+	// for system id need to log imu and controls at full rate
+	add_topic("actuator_controls_0");
+	add_topic("actuator_controls_1");
+	add_topic("sensor_combined");
 }
 
 int Logger::add_topics_from_file(const char *fname)
@@ -725,16 +747,28 @@ void Logger::run()
 
 	} else {
 
-		/* get the logging mode */
-		if (_sdlog_mode_handle != PARAM_INVALID) {
-			param_get(_sdlog_mode_handle, &_sdlog_mode);
+		// get the logging profile
+		SDLogProfile sdlog_profile = SDLogProfile::DEFAULT;
+
+		if (_sdlog_profile_handle != PARAM_INVALID) {
+			param_get(_sdlog_profile_handle, &sdlog_profile);
 		}
 
-		if (_sdlog_mode == 3) {
-			add_calibration_topics();
+		// load appropriate topics for profile
+		if (sdlog_profile == SDLogProfile::DEFAULT) {
+			add_common_topics();
+			add_estimator_replay_topics();
+
+		} else if (sdlog_profile == SDLogProfile::THERMAL_CALIBRATION) {
+			add_thermal_calibration_topics();
+
+		} else if (sdlog_profile == SDLogProfile::SYSTEM_IDENTIFICATION) {
+			add_common_topics();
+			add_system_identification_topics();
 
 		} else {
-			add_default_topics();
+			add_common_topics();
+			add_estimator_replay_topics();
 		}
 	}
 
@@ -1401,18 +1435,18 @@ void Logger::perf_iterate_callback(perf_counter_t handle, void *user)
 	perf_callback_data_t *callback_data = (perf_callback_data_t *)user;
 	const int buffer_length = 256;
 	char buffer[buffer_length];
-	char perf_name[32];
+	const char *perf_name;
 
 	perf_print_counter_buffer(buffer, buffer_length, handle);
 
 	if (callback_data->preflight) {
-		snprintf(perf_name, 32, "perf_counter_preflight-%02i", callback_data->counter);
+		perf_name = "perf_counter_preflight";
 
 	} else {
-		snprintf(perf_name, 32, "perf_counter_postflight-%02i", callback_data->counter);
+		perf_name = "perf_counter_postflight";
 	}
 
-	callback_data->logger->write_info(perf_name, buffer);
+	callback_data->logger->write_info_multiple(perf_name, buffer, callback_data->counter != 0);
 	++callback_data->counter;
 }
 
@@ -1431,20 +1465,20 @@ void Logger::write_perf_data(bool preflight)
 void Logger::print_load_callback(void *user)
 {
 	perf_callback_data_t *callback_data = (perf_callback_data_t *)user;
-	char perf_name[32];
+	const char *perf_name;
 
 	if (!callback_data->buffer) {
 		return;
 	}
 
 	if (callback_data->preflight) {
-		snprintf(perf_name, 32, "perf_top_preflight-%02i", callback_data->counter);
+		perf_name = "perf_top_preflight";
 
 	} else {
-		snprintf(perf_name, 32, "perf_top_postflight-%02i", callback_data->counter);
+		perf_name = "perf_top_postflight";
 	}
 
-	callback_data->logger->write_info(perf_name, callback_data->buffer);
+	callback_data->logger->write_info_multiple(perf_name, callback_data->buffer, callback_data->counter != 0);
 	++callback_data->counter;
 }
 
@@ -1561,6 +1595,32 @@ void Logger::write_info(const char *name, const char *value)
 	_writer.unlock();
 }
 
+void Logger::write_info_multiple(const char *name, const char *value, bool is_continued)
+{
+	_writer.lock();
+	ulog_message_info_multiple_header_s msg;
+	uint8_t *buffer = reinterpret_cast<uint8_t *>(&msg);
+	msg.msg_type = static_cast<uint8_t>(ULogMessageType::INFO_MULTIPLE);
+	msg.is_continued = is_continued;
+
+	/* construct format key (type and name) */
+	size_t vlen = strlen(value);
+	msg.key_len = snprintf(msg.key, sizeof(msg.key), "char[%zu] %s", vlen, name);
+	size_t msg_size = sizeof(msg) - sizeof(msg.key) + msg.key_len;
+
+	/* copy string value directly to buffer */
+	if (vlen < (sizeof(msg) - msg_size)) {
+		memcpy(&buffer[msg_size], value, vlen);
+		msg_size += vlen;
+
+		msg.msg_size = msg_size - ULOG_MSG_HEADER_LEN;
+
+		write_message(buffer, msg_size);
+	}
+
+	_writer.unlock();
+}
+
 void Logger::write_info(const char *name, int32_t value)
 {
 	write_info_template<int32_t>(name, value, "int32_t");
@@ -1605,10 +1665,20 @@ void Logger::write_header()
 	header.magic[4] = 0x01;
 	header.magic[5] = 0x12;
 	header.magic[6] = 0x35;
-	header.magic[7] = 0x00; //file version 0
+	header.magic[7] = 0x01; //file version 1
 	header.timestamp = hrt_absolute_time();
 	_writer.lock();
 	write_message(&header, sizeof(header));
+
+	// write the Flags message: this MUST be written right after the ulog header
+	ulog_message_flag_bits_s flag_bits;
+
+	memset(&flag_bits, 0, sizeof(flag_bits));
+	flag_bits.msg_size = sizeof(flag_bits) - ULOG_MSG_HEADER_LEN;
+	flag_bits.msg_type = static_cast<uint8_t>(ULogMessageType::FLAG_BITS);
+
+	write_message(&flag_bits, sizeof(flag_bits));
+
 	_writer.unlock();
 }
 
@@ -1621,6 +1691,12 @@ void Logger::write_version()
 	write_info("sys_name", "PX4");
 	write_info("sys_os_name", px4_os_name());
 	const char *os_version = px4_os_version_string();
+
+	const char *git_branch = px4_firmware_git_branch();
+
+	if (git_branch && git_branch[0]) {
+		write_info("ver_sw_branch", git_branch);
+	}
 
 	if (os_version) {
 		write_info("sys_os_ver", os_version);
