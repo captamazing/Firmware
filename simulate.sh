@@ -2,4 +2,15 @@ make posix_sitl_default
 source Tools/setup_gazebo.bash $(pwd) $(pwd)/build_posix_sitl_default
 export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$(pwd)
 export ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH:$(pwd)/Tools/sitl_gazebo
-roslaunch px4 posix_sitl.launch vehicle:=ursa est:=ekf2
+no_gpu=0
+while [[ $# -gt 0 ]]
+do
+key="$1"
+case $key in
+    --no_gpu)
+    no_gpu=1
+    shift # past argument
+    ;;
+esac
+done
+roslaunch px4 posix_sitl.launch vehicle:=ursa est:=ekf2 no_gpu:="$no_gpu"
