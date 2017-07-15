@@ -134,6 +134,12 @@ then
 	cp $logfile $rootfs/replay.px4log
 fi
 
+# Check if simulation should go ahead - if not we are done.
+if [ -n "$no_sim" ] 
+then
+	exit 0
+fi
+
 # Do not exit on failure now from here on because we want the complete cleanup
 set +e
 
