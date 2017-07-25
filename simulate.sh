@@ -20,6 +20,9 @@ case $key in
     est="lpe"
     shift # past argument
     ;;
+    *)
+    echo $"Invalid argument found. Usage: $0 {--no_gpu|--use_ekf|--use_lpe}"
+    exit 1
 esac
 done
 roslaunch px4 posix_sitl.launch vehicle:=ursa est:="$est" no_gpu:="$no_gpu"
