@@ -60,34 +60,6 @@
 	"folders":
 	[
 		{
-			"file_exclude_patterns":
-			[
-				"*.o",
-				"*.a",
-				"*.d",
-				".built",
-				".context",
-				".depend",
-				".config",
-				".version",
-				"Make.dep",
-				".configured",
-				"*.sublime-project",
-				"*.sublime-workspace",
-				".project",
-				".cproject",
-				"cscope.out"
-			],
-			"folder_exclude_patterns":
-			[
-				".settings",
-				"nuttx/arch/arm/src/board",
-				"nuttx/arch/arm/src/chip",
-				"build_*"
-			],
-			"path": "."
-		},
-		{
 			"path": "/home/ursa2/ursa-server"
 		}
 	],
