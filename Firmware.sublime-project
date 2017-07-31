@@ -60,7 +60,10 @@
 	"folders":
 	[
 		{
-			"path": "/home/ursa2/ursa-server"
+			"path": "~/ursa-server"
+		},
+		{
+			"path": "."
 		}
 	],
 	"settings":

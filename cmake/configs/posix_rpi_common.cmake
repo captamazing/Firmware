@@ -127,6 +127,5 @@ set(config_df_driver_list
 	ads1115
 	ursa_gpio
 	pca9685
-	common
 	pigpio
 )
