@@ -27,6 +27,7 @@ set(config_module_list
 	platforms/posix/drivers/df_ads1115_wrapper
 	platforms/posix/drivers/df_ursapwm_wrapper
 	platforms/posix/drivers/df_ursagpio_wrapper
+	platforms/posix/drivers/df_srf08_wrapper
 	platforms/posix/drivers/ursa_rcin
 	platforms/posix/drivers/ursa_sonar
 
@@ -128,4 +129,5 @@ set(config_df_driver_list
 	ursa_gpio
 	pca9685
 	pigpio
+	srf08
 )
